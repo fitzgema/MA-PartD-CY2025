@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MA Static API Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+    input, select { padding: 8px; font-size: 14px; }
+    .row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .carrier { border: 1px solid #ddd; border-radius: 8px; padding: 8px; margin: 6px 0; }
+    .badge { background: #eef; color: #224; border-radius: 12px; padding: 2px 8px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Medicare Advantage Carrier Lookup (Static JSON)</h1>
+  <div class="row">
+    <label>ZIP <input id="zip" placeholder="e.g., 94110" maxlength="5"></label>
+    <label>Year <select id="year">
+      <option value="2025">2025</option>
+    </select></label>
+    <button id="go">Lookup</button>
+  </div>
+  <div id="out"></div>
+<script>
+async function lookup() {
+  const zip = document.getElementById('zip').value;
+  const year = document.getElementById('year').value;
+  const base = document.location.origin + document.location.pathname.replace(/\/web-demo\/.*/, '/');
+  const zipIndexUrl = base + 'dist/years/' + year + '/zip-index.json';
+  const idx = await (await fetch(zipIndexUrl)).json();
+  const entry = idx.find(r => r.zip === zip);
+  const out = document.getElementById('out');
+  out.innerHTML = '';
+  if (!entry) { out.textContent = 'ZIP not found in index (ZCTA proxy).'; return; }
+  const [fips, share] = entry.counties[0];
+  const countyUrl = base + 'dist/years/' + year + '/by-county/' + fips + '.json';
+  const county = await (await fetch(countyUrl)).json();
+  const title = document.createElement('h3');
+  title.textContent = county.county_name + ', ' + county.state + ' — ' + county.carriers.length + ' carriers';
+  out.appendChild(title);
+  for (const c of county.carriers) {
+    const div = document.createElement('div');
+    div.className = 'carrier';
+    const h = document.createElement('div');
+    h.innerHTML = '<strong>' + c.orgName + '</strong> <span class="badge">' + c.contractIds.join(',') + '</span>';
+    div.appendChild(h);
+    if (c.plans?.length) {
+      const ul = document.createElement('ul');
+      for (const p of c.plans.slice(0,3)) {
+        const li = document.createElement('li');
+        li.textContent = `${p.contractId}-${p.planId} · ${p.marketingName || ''}`;
+        ul.appendChild(li);
+      }
+      div.appendChild(ul);
+    }
+    out.appendChild(div);
+  }
+}
+document.getElementById('go').addEventListener('click', lookup);
+</script>
+</body>
+</html>

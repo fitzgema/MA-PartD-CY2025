@@ -1,0 +1,48 @@
+{
+  "UnitedHealthcare": [
+    "UHC",
+    "United Health Care",
+    "United Healthcare",
+    "AARP Medicare"
+  ],
+  "Aetna": [
+    "Aetna Medicare",
+    "Aetna CVS",
+    "CVS Aetna"
+  ],
+  "Humana": [
+    "Humana"
+  ],
+  "Cigna Healthcare": [
+    "Cigna",
+    "Cigna Medicare"
+  ],
+  "Wellcare": [
+    "WellCare",
+    "Allwell",
+    "Centene"
+  ],
+  "Elevation/Anthem BCBS": [
+    "Anthem",
+    "Blue Cross",
+    "Blue Shield",
+    "BCBS",
+    "Elevance"
+  ],
+  "Kaiser Permanente": [
+    "Kaiser"
+  ],
+  "Devoted Health": [
+    "Devoted"
+  ],
+  "SCAN Health Plan": [
+    "SCAN"
+  ],
+  "UPMC Health Plan": [
+    "UPMC for Life"
+  ],
+  "Highmark": [
+    "Highmark Blue Cross Blue Shield",
+    "Highmark BCBS"
+  ]
+}
