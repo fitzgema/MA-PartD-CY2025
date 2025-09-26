@@ -5,67 +5,89 @@
   <title>Medicare Advantage Carrier Lookup (Static JSON)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
-    h1 { margin: 0 0 16px; }
-    label { margin-right: 12px; }
+    :root {
+      --border: #e5e7eb;
+      --muted: #666;
+      --bg: #f9fafb;
+      --bg-hover: #f3f4f6;
+      --danger: #b00;
+      --pad: 24px;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: var(--pad); }
+    h1 { margin: 0 0 16px; font-size: 20px; }
+    label { margin-right: 12px; display: inline-flex; gap: 8px; align-items: center; }
     input, select, button { font-size: 16px; padding: 6px 10px; }
-    #msg { margin: 16px 0; color: #b00; }
+    button { cursor: pointer; }
+    #msg { margin: 16px 0; color: var(--danger); white-space: pre-wrap; }
     #out { margin-top: 12px; }
     .carrier { padding: 8px 0; border-bottom: 1px solid #eee; }
     .badge { font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
-    .muted { color: #666; font-size: 13px; }
+    .muted { color: var(--muted); font-size: 13px; }
 
-    /* NEW: simple plan chip */
+    /* plan chip */
     .plan-chip {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 3px 8px; margin: 4px 6px 0 0;
-      border: 1px solid #e5e7eb; border-radius: 9999px;
-      background: #f9fafb; font-size: 12px; cursor: pointer;
+      border: 1px solid var(--border); border-radius: 9999px;
+      background: var(--bg); font-size: 12px; cursor: pointer;
       user-select: none;
     }
-    .plan-chip:hover { background: #f3f4f6; }
-    .carrier .name { cursor: pointer; } /* for PlanPicker */
+    .plan-chip:hover { background: var(--bg-hover); }
+    .carrier .name { cursor: pointer; }
   </style>
 
-<link rel="stylesheet" href="plan-viewer.css" />
-<script src="plan-viewer.js" defer></script>
-<script src="plan-picker.js" defer></script>
-
-
+  <!-- Optional (your implementations) -->
+  <link rel="stylesheet" href="plan-viewer.css" />
+  <script src="plan-viewer.js" defer></script>
+  <script src="plan-picker.js" defer></script>
 </head>
 
 <body>
   <h1>Medicare Advantage Carrier Lookup (Static JSON)</h1>
 
-  <div>
-    <label>ZIP
+  <div role="form" aria-label="Lookup">
+    <label for="zip">ZIP
       <input id="zip" placeholder="e.g., 55379" inputmode="numeric" maxlength="5" />
     </label>
-    <label>Year
+    <label for="year">Year
       <select id="year">
         <option value="2025" selected>2025</option>
       </select>
     </label>
-    <button id="go">Lookup</button>
+    <button id="go" type="button">Lookup</button>
   </div>
 
-  <div id="msg" class="muted"></div>
+  <div id="msg" class="muted" aria-live="polite"></div>
   <div id="out"></div>
 
-  <script>
-    // Initialize the viewer when DOM is ready
-    window.addEventListener('DOMContentLoaded', () => PlanViewer.init());
+  <script type="module">
+    // Safe guards if external scripts aren't present
+    const PlanViewer = (globalThis.PlanViewer ?? {
+      init(){}, register(node, plan){ node.addEventListener('click', () => alert('PlanViewer not loaded.\n\n' + JSON.stringify(plan, null, 2))); }
+    });
+    const PlanPicker = (globalThis.PlanPicker ?? {
+      open(plans, opts){ alert((opts?.title || 'Choose a plan') + '\n\n' + plans.map(p => (p.contract || p.contractId) + ' ' + (p.pbp || p.planId)).join('\n')); }
+    });
 
-    // Compute base like: https://fitzgema.github.io/MA-PartD-CY2025/
-    const BASE = location.origin + location.pathname.replace(/\/web-demo\/.*/, '/');
+    // Compute BASE so it works on GitHub Pages (subfolder) or locally
+    const BASE = (() => {
+      const { origin, pathname } = location;
+      // If this page is /web-demo/..., strip from /web-demo/ onward; else use folder of current file.
+      const m = pathname.match(/^(.*?)(\/web-demo\/.*)$/);
+      if (m) return origin + m[1] + '/';
+      return origin + pathname.replace(/[^/]*$/, ''); // current dir
+    })();
 
-    function normalizeZip(z) {
-      return String(z || '').replace(/\D/g, '').padStart(5, '0');
-    }
+    const $ = (id) => document.getElementById(id);
+    const $msg = () => $('msg');
+    const $out = () => $('out');
+
+    const normalizeZip = (z) => String(z ?? '').replace(/\D/g, '').padStart(5, '0');
 
     async function fetchJson(url) {
       const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error(res.status + ' ' + res.statusText + ' @ ' + url);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText} @ ${url}`);
       return res.json();
     }
 
@@ -73,55 +95,81 @@
       return fetchJson(`${BASE}years/${year}/zip-index.json`);
     }
 
-    // UPDATED: render carriers with clickable name (PlanPicker) + per-plan chips that open PlanViewer
+    async function tryFetch(url) {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      return { json: await res.json(), url };
+    }
+
+    // Optional helper if you want to deep-load a plan JSON by contract/PBP
+    async function loadPlanJSON(contract, pbp, year) {
+      const candidates = [
+        `${BASE}years/${year}/by-plan/${contract}-${pbp}.json`,
+        `${BASE}years/${year}/plans/${contract}-${pbp}.json`,
+        `${BASE}years/${year}/plans/${contract}/${pbp}.json`,
+        `${BASE}years/${year}/plan-details/${contract}-${pbp}.json`,
+      ];
+      const errors = [];
+      for (const u of candidates) {
+        try { return await tryFetch(u); } catch (e) { errors.push(`${u} → ${e.message}`); }
+      }
+      throw new Error(`No plan JSON found.\nTried:\n- ${errors.join('\n- ')}`);
+    }
+
     function renderCountySummary(parent, county) {
       const header = document.createElement('h3');
-      header.textContent = `${county.county_name}, ${county.state} — ${county.carriers?.length || 0} carriers`;
+      header.textContent = `${county.county_name}, ${county.state} — ${(county.carriers?.length ?? 0)} carriers`;
       parent.appendChild(header);
 
-      (county.carriers || []).forEach(c => {
+      (county.carriers ?? []).forEach(c => {
         const row = document.createElement('div');
         row.className = 'carrier';
 
-        // Top line: carrier name (click to open PlanPicker) + contracts + count
+        // Top line
+        const top = document.createElement('div');
+
         const name = document.createElement('strong');
         name.className = 'name';
         name.textContent = c.orgName || 'Carrier';
         name.title = 'Click to choose a plan';
+        name.tabIndex = 0;
         name.addEventListener('click', () => {
           const plans = Array.isArray(c.plans) ? c.plans : [];
           PlanPicker.open(plans, { title: `${c.orgName || 'Carrier'} — choose a plan` });
         });
+        name.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); name.click(); }
+        });
 
         const contracts = document.createElement('span');
         contracts.className = 'badge';
-        contracts.textContent = Array.isArray(c.contractIds) ? c.contractIds.join(', ') : '';
+        const ids = Array.isArray(c.contractIds) ? c.contractIds.join(', ') : '';
+        contracts.textContent = ids;
 
         const count = document.createElement('span');
         count.className = 'muted';
-        const n = (c.plans || []).length;
+        const n = (c.plans ?? []).length;
         count.textContent = ` — ${n} plan${n === 1 ? '' : 's'}`;
 
-        const top = document.createElement('div');
         top.appendChild(name);
-        if (contracts.textContent) top.appendChild(contracts);
+        if (ids) top.appendChild(contracts);
         top.appendChild(count);
         row.appendChild(top);
 
-        // Chips for each plan (if present in JSON)
+        // Plan chips
         if (Array.isArray(c.plans) && c.plans.length) {
           const chips = document.createElement('div');
           c.plans.forEach(p => {
-            const chip = document.createElement('span');
+            const chip = document.createElement('button');
+            chip.type = 'button';
             chip.className = 'plan-chip';
             const contract = p.contract || p.contractId || p.contract_id || '';
             const pbp = p.pbp || p.planId || p.plan_id || '';
             chip.textContent = `${contract}${pbp ? ' ' + pbp : ''}`.trim();
 
-            // Open the plan drawer with the raw object we already have
+            // Register with your viewer (opens a drawer/modal, etc.)
             PlanViewer.register(chip, p, {
               title: `${contract}${pbp ? ' - ' + pbp : ''}`,
-              // hint can help QA provenance; here the data comes from the county JSON
               hint: 'source: county JSON'
             });
 
@@ -135,13 +183,13 @@
     }
 
     async function lookup() {
-      const msg = document.getElementById('msg');
-      const out = document.getElementById('out');
+      const msg = $msg();
+      const out = $out();
       msg.textContent = '';
       out.innerHTML = '';
 
-      const year = document.getElementById('year').value;
-      const zip = normalizeZip(document.getElementById('zip').value);
+      const year = $('year').value;
+      const zip = normalizeZip($('zip').value);
 
       if (!/^\d{5}$/.test(zip)) {
         msg.textContent = 'Please enter a 5-digit ZIP.';
@@ -149,29 +197,27 @@
       }
 
       try {
-        // 1) Find candidate counties for ZIP
+        // 1) ZIP → candidate counties
         const idx = await loadZipIndex(year);
         const rec = idx.find(e => e.zip === zip);
         if (!rec) {
           msg.textContent = `ZIP ${zip} is not in the index. Try a nearby residential ZIP (not PO Box).`;
           return;
         }
-        if (!rec.counties?.length) {
+        if (!(rec.counties?.length)) {
           msg.textContent = `ZIP ${zip} returned no counties.`;
           return;
         }
 
-        // 2) Pick the top county by share (simplest for demo)
-        const [fips /*, share */] = rec.counties[0];
+        // 2) Choose top county by share
+        const [fips] = rec.counties[0];
         const countyUrl = `${BASE}years/${year}/by-county/${fips}.json`;
 
-        // 3) Fetch county carriers (+ embedded plans if present)
+        // 3) Fetch + 4) Render
         const county = await fetchJson(countyUrl);
-
-        // 4) Render
         renderCountySummary(out, county);
 
-        // 5) If ZIP spans multiple counties, show a helpful hint
+        // 5) Note if multiple counties
         if (rec.counties.length > 1) {
           const hint = document.createElement('div');
           hint.className = 'muted';
@@ -184,10 +230,17 @@
       }
     }
 
-    document.getElementById('go').addEventListener('click', lookup);
-    document.getElementById('zip').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') lookup();
-    });
+    function init() {
+      // If your PlanViewer exposes init, call it
+      if (typeof PlanViewer.init === 'function') {
+        try { PlanViewer.init(); } catch {}
+      }
+
+      $('go').addEventListener('click', lookup);
+      $('zip').addEventListener('keydown', (e) => { if (e.key === 'Enter') lookup(); });
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
 </html>
