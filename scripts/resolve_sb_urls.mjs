@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import fetch from "node-fetch";
-import pdf from "pdf-parse";
+import { pdfBufferToText } from "./_pdf_text.js";
 import pLimit from "p-limit";
 
 const YEARS = (process.env.TARGET_YEARS || "2025")
@@ -65,14 +65,19 @@ async function serpapi(query, num=10) {
   // de-dupe
   return Array.from(new Set(urls));
 }
-async function fetchPdfToText(url, maxBytes=10*1024*1024) {
+async function fetchPdfToText(url, maxBytes = 10 * 1024 * 1024) {
   const r = await fetch(url, { headers: { "User-Agent": UA }, redirect: "follow" });
   if (!r.ok) return null;
   const ct = (r.headers.get("content-type") || "").toLowerCase();
   if (!ct.includes("pdf") && !url.toLowerCase().endsWith(".pdf")) return null;
+
   const ab = await r.arrayBuffer();
   const buf = Buffer.from(ab.slice(0, maxBytes));
-  try { const parsed = await pdf(buf); return parsed.text || ""; } catch { return null; }
+  try {
+    return await pdfBufferToText(buf);
+  } catch {
+    return null;
+  }
 }
 
 /* ---------- load distinct plans from previous MA build ---------- */
