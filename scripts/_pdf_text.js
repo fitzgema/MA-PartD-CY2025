@@ -1,4 +1,6 @@
 // scripts/_pdf_text.js
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 
 // PDF.js needs a worker; in Node we can use the same build
