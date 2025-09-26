@@ -37,6 +37,11 @@ jobs:
           USE_HUD: ${{ secrets.USE_HUD || '' }}
         run: npm run build
 
+      - name: Include demo page (optional)
+        run: |
+          mkdir -p dist/web-demo
+          cp -R web-demo/* dist/web-demo/ || true
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
