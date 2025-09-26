@@ -53,17 +53,18 @@ for (const year of YEARS) {
   const yearDir = path.join(OUT_DIR, "years", String(year));
   await fs.mkdir(path.join(yearDir, "by-county"), { recursive: true });
 
-// Filter to this year and MA by Contract ID prefix
+// Filter to this year and MA by Contract ID prefix (H or R)
 const yrRows = rows.filter((r) => {
   const cy = Number(pick(r, ["Contract Year", "contract year"]));
   const contractId = String(
     pick(r, ["Contract ID", "Contract Number", "contract id"]) || ""
   ).trim().toUpperCase();
-  const contractPrefix = contractId.charAt(0); // H/R = MA; S = PDP
-  const isMA = contractPrefix === "H" || contractPrefix === "R";
+  const prefix = contractId.charAt(0); // H/R = MA, S = PDP
+  const isMA = prefix === "H" || prefix === "R";
   return cy === year && isMA;
 });
 console.log(`[INFO] Year ${year}: MA rows: ${yrRows.length}`);
+
 
 
   const fipsKey = keyFromHeader(rows[0], [
@@ -73,14 +74,6 @@ console.log(`[INFO] Year ${year}: MA rows: ${yrRows.length}`);
     "County FIPS Code",
   ]);
 
-let countyFips = cleanFips(pick(r, [fipsKey]));
-if (!countyFips) {
-  const raw = String(pick(r, [fipsKey]) || "");
-  const m = raw.match(/(\d{5})/);
-  if (m) countyFips = m[1]; // sometimes FIPS comes as '06075 - San Francisco'
-}
-
-  
   const stateKey = keyFromHeader(rows[0], [
     "State Abbreviation",
     "State Code",
@@ -98,29 +91,36 @@ if (!countyFips) {
   const snpTypeKey = keyFromHeader(rows[0], ["SNP Type", "Special Needs Plan (SNP) Indicator"]);
 
   const carriersByCounty = new Map(); // county_fips -> {state, county_name, carriers: Map}
-  for (const r of yrRows) {
-    let countyFips = cleanFips(pick(r, [fipsKey]));
-    const state = String(pick(r, [stateKey]) || "").trim();
-    const countyName = String(pick(r, [countyNameKey]) || "").trim();
+ for (const r of yrRows) {
+  // ---- keys computed earlier ----
+  let countyFips = cleanFips(pick(r, [fipsKey]));
+  if (!countyFips) {
+    const raw = String(pick(r, [fipsKey]) || "");
+    const m = raw.match(/(\d{5})/);
+    if (m) countyFips = m[1];
+  }
 
-    // If no explicit FIPS in row, resolve from state+county name
-    if (!countyFips) {
-      if (!state || !countyName) continue;
-      countyFips = countyFipsMap.get(keyCounty(state, countyName));
-      if (!countyFips) continue; // skip if can’t resolve
-    }
+  const state = String(pick(r, [stateKey]) || "").trim();
+  const countyName = String(pick(r, [countyNameKey]) || "").trim();
 
-    const contractId = String(pick(r, [contractKey]) || "").trim();
-    const planId = String(pick(r, [planKey]) || "").trim();
-    if (!contractId || !planId) continue;
+  if (!countyFips) {
+    if (!state || !countyName) continue;
+    countyFips = countyFipsMap.get(keyCounty(state, countyName));
+    if (!countyFips) continue;
+  }
 
-    const orgName =
-      String(pick(r, [orgNameKey]) || "").trim() ||
-      contractId;
-    const marketingName = String(pick(r, [planNameKey]) || "").trim();
-    const planType = String(pick(r, [planTypeKey]) || "").trim() || null;
-    const snpType =
-      (String(pick(r, [snpTypeKey]) || "").trim() || null) ?? null;
+  const contractId = String(pick(r, [contractKey]) || "").trim();
+  const planId = String(pick(r, [planKey]) || "").trim();
+  if (!contractId || !planId) continue;
+
+  const orgName =
+    String(pick(r, [orgNameKey]) || "").trim() || contractId;
+  const marketingName = String(pick(r, [planNameKey]) || "").trim();
+  const planType = String(pick(r, [planTypeKey]) || "").trim() || null;
+  const snpType =
+    (String(pick(r, [snpTypeKey]) || "").trim() || null) ?? null;
+
+  // ... (rest of your carrier-bucketing code stays the same)
 
     let bucket = carriersByCounty.get(countyFips);
     if (!bucket) {
