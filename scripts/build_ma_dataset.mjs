@@ -72,6 +72,15 @@ console.log(`[INFO] Year ${year}: MA rows: ${yrRows.length}`);
     "County Code",
     "County FIPS Code",
   ]);
+
+let countyFips = cleanFips(pick(r, [fipsKey]));
+if (!countyFips) {
+  const raw = String(pick(r, [fipsKey]) || "");
+  const m = raw.match(/(\d{5})/);
+  if (m) countyFips = m[1]; // sometimes FIPS comes as '06075 - San Francisco'
+}
+
+  
   const stateKey = keyFromHeader(rows[0], [
     "State Abbreviation",
     "State Code",
