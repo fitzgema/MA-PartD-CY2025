@@ -1,63 +1,128 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>MA Static API Demo</title>
+  <title>Medicare Advantage Carrier Lookup (Static JSON)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
-    input, select { padding: 8px; font-size: 14px; }
-    .row { display: flex; gap: 8px; margin-bottom: 12px; }
-    .carrier { border: 1px solid #ddd; border-radius: 8px; padding: 8px; margin: 6px 0; }
-    .badge { background: #eef; color: #224; border-radius: 12px; padding: 2px 8px; font-size: 12px; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+    h1 { margin: 0 0 16px; }
+    label { margin-right: 12px; }
+    input, select, button { font-size: 16px; padding: 6px 10px; }
+    #msg { margin: 16px 0; color: #b00; }
+    #out { margin-top: 12px; }
+    .carrier { padding: 8px 0; border-bottom: 1px solid #eee; }
+    .badge { font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+    .muted { color: #666; font-size: 13px; }
   </style>
 </head>
 <body>
   <h1>Medicare Advantage Carrier Lookup (Static JSON)</h1>
-  <div class="row">
-    <label>ZIP <input id="zip" placeholder="e.g., 94110" maxlength="5"></label>
-    <label>Year <select id="year">
-      <option value="2025">2025</option>
-    </select></label>
+
+  <div>
+    <label>ZIP
+      <input id="zip" placeholder="e.g., 55379" inputmode="numeric" maxlength="5" />
+    </label>
+    <label>Year
+      <select id="year">
+        <option value="2025" selected>2025</option>
+      </select>
+    </label>
     <button id="go">Lookup</button>
   </div>
+
+  <div id="msg" class="muted"></div>
   <div id="out"></div>
-<script>
-async function lookup() {
-  const zip = document.getElementById('zip').value;
-  const year = document.getElementById('year').value;
-  const base = document.location.origin + document.location.pathname.replace(/\/web-demo\/.*/, '/');
-  const zipIndexUrl = base + 'dist/years/' + year + '/zip-index.json';
-  const idx = await (await fetch(zipIndexUrl)).json();
-  const entry = idx.find(r => r.zip === zip);
-  const out = document.getElementById('out');
-  out.innerHTML = '';
-  if (!entry) { out.textContent = 'ZIP not found in index (ZCTA proxy).'; return; }
-  const [fips, share] = entry.counties[0];
-  const countyUrl = base + 'dist/years/' + year + '/by-county/' + fips + '.json';
-  const county = await (await fetch(countyUrl)).json();
-  const title = document.createElement('h3');
-  title.textContent = county.county_name + ', ' + county.state + ' — ' + county.carriers.length + ' carriers';
-  out.appendChild(title);
-  for (const c of county.carriers) {
-    const div = document.createElement('div');
-    div.className = 'carrier';
-    const h = document.createElement('div');
-    h.innerHTML = '<strong>' + c.orgName + '</strong> <span class="badge">' + c.contractIds.join(',') + '</span>';
-    div.appendChild(h);
-    if (c.plans?.length) {
-      const ul = document.createElement('ul');
-      for (const p of c.plans.slice(0,3)) {
-        const li = document.createElement('li');
-        li.textContent = `${p.contractId}-${p.planId} · ${p.marketingName || ''}`;
-        ul.appendChild(li);
-      }
-      div.appendChild(ul);
+
+  <script>
+    // Compute base like: https://fitzgema.github.io/MA-PartD-CY2025/
+    const BASE = location.origin + location.pathname.replace(/\/web-demo\/.*/, '/');
+
+    function normalizeZip(z) {
+      return String(z || '').replace(/\D/g, '').padStart(5, '0');
     }
-    out.appendChild(div);
-  }
-}
-document.getElementById('go').addEventListener('click', lookup);
-</script>
+
+    async function fetchJson(url) {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(res.status + ' ' + res.statusText + ' @ ' + url);
+      return res.json();
+    }
+
+    async function loadZipIndex(year) {
+      return fetchJson(`${BASE}years/${year}/zip-index.json`);
+    }
+
+    function renderCountySummary(parent, county) {
+      const header = document.createElement('h3');
+      header.textContent = `${county.county_name}, ${county.state} — ${county.carriers?.length || 0} carriers`;
+      parent.appendChild(header);
+
+      (county.carriers || []).forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'carrier';
+        const count = (c.plans || []).length;
+        div.innerHTML =
+          `<strong>${c.orgName}</strong>
+           <span class="badge">${c.contractIds.join(', ')}</span>
+           <span class="muted"> — ${count} plan${count === 1 ? '' : 's'}</span>`;
+        parent.appendChild(div);
+      });
+    }
+
+    async function lookup() {
+      const msg = document.getElementById('msg');
+      const out = document.getElementById('out');
+      msg.textContent = '';
+      out.innerHTML = '';
+
+      const year = document.getElementById('year').value;
+      const zip = normalizeZip(document.getElementById('zip').value);
+
+      if (!/^\d{5}$/.test(zip)) {
+        msg.textContent = 'Please enter a 5‑digit ZIP.';
+        return;
+      }
+
+      try {
+        // 1) Find candidate counties for ZIP
+        const idx = await loadZipIndex(year);
+        const rec = idx.find(e => e.zip === zip);
+        if (!rec) {
+          msg.textContent = `ZIP ${zip} is not in the index. Try a nearby residential ZIP (not PO Box).`;
+          return;
+        }
+        if (!rec.counties?.length) {
+          msg.textContent = `ZIP ${zip} returned no counties.`;
+          return;
+        }
+
+        // 2) Pick the top county by share (simplest for demo)
+        const [fips /*, share */] = rec.counties[0];
+        const countyUrl = `${BASE}years/${year}/by-county/${fips}.json`;
+
+        // 3) Fetch county carriers
+        const county = await fetchJson(countyUrl);
+
+        // 4) Render
+        renderCountySummary(out, county);
+
+        // 5) If ZIP spans multiple counties, show a helpful hint
+        if (rec.counties.length > 1) {
+          const hint = document.createElement('div');
+          hint.className = 'muted';
+          const other = rec.counties.slice(1).map(([f]) => f).join(', ');
+          hint.textContent = `Note: ZIP ${zip} spans multiple counties; showing top match FIPS ${fips}. Others: ${other || '—'}.`;
+          out.appendChild(hint);
+        }
+      } catch (err) {
+        msg.textContent = 'Error: ' + (err?.message || err);
+      }
+    }
+
+    document.getElementById('go').addEventListener('click', lookup);
+    document.getElementById('zip').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') lookup();
+    });
+  </script>
 </body>
 </html>
