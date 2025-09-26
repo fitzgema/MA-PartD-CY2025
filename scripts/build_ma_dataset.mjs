@@ -53,16 +53,18 @@ for (const year of YEARS) {
   const yearDir = path.join(OUT_DIR, "years", String(year));
   await fs.mkdir(path.join(yearDir, "by-county"), { recursive: true });
 
-  const yrRows = rows.filter((r) => {
-    const cy = Number(pick(r, ["Contract Year", "contract year"]));
-    const cat = String(
-      pick(r, ["Contract Category Type", "Contract Category", "Category"])
-    )
-      .trim()
-      .toUpperCase();
-    return cy === year && cat.startsWith("MA"); // MA (includes MA-PD)
-  });
-  console.log(`[INFO] Year ${year}: MA rows: ${yrRows.length}`);
+// Filter to this year and MA by Contract ID prefix
+const yrRows = rows.filter((r) => {
+  const cy = Number(pick(r, ["Contract Year", "contract year"]));
+  const contractId = String(
+    pick(r, ["Contract ID", "Contract Number", "contract id"]) || ""
+  ).trim().toUpperCase();
+  const contractPrefix = contractId.charAt(0); // H/R = MA; S = PDP
+  const isMA = contractPrefix === "H" || contractPrefix === "R";
+  return cy === year && isMA;
+});
+console.log(`[INFO] Year ${year}: MA rows: ${yrRows.length}`);
+
 
   const fipsKey = keyFromHeader(rows[0], [
     "County FIPS",
