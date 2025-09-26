@@ -14,8 +14,8 @@
     "csv-parse": "^5.5.6",
     "fast-glob": "^3.3.2",
     "node-fetch": "^3.3.2",
-    "xlsx": "^0.18.5",
-    "pdf-parse": "^1.1.1",
-    "p-limit": "^5.0.0"
+    "p-limit": "^5.0.0",
+    "pdfjs-dist": "^4.4.168",
+    "xlsx": "^0.18.5"
   }
 }
