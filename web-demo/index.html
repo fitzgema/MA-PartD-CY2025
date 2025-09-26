@@ -98,4 +98,94 @@
         const count = document.createElement('span');
         count.className = 'muted';
         const n = (c.plans || []).length;
-        count.textContent = ` — ${n} plan${n ===
+        count.textContent = ` — ${n} plan${n === 1 ? '' : 's'}`;
+
+        const top = document.createElement('div');
+        top.appendChild(name);
+        if (contracts.textContent) top.appendChild(contracts);
+        top.appendChild(count);
+        row.appendChild(top);
+
+        // Chips for each plan (if present in JSON)
+        if (Array.isArray(c.plans) && c.plans.length) {
+          const chips = document.createElement('div');
+          c.plans.forEach(p => {
+            const chip = document.createElement('span');
+            chip.className = 'plan-chip';
+            const contract = p.contract || p.contractId || p.contract_id || '';
+            const pbp = p.pbp || p.planId || p.plan_id || '';
+            chip.textContent = `${contract}${pbp ? ' ' + pbp : ''}`.trim();
+
+            // Open the plan drawer with the raw object we already have
+            PlanViewer.register(chip, p, {
+              title: `${contract}${pbp ? ' - ' + pbp : ''}`,
+              // hint can help QA provenance; here the data comes from the county JSON
+              hint: 'source: county JSON'
+            });
+
+            chips.appendChild(chip);
+          });
+          row.appendChild(chips);
+        }
+
+        parent.appendChild(row);
+      });
+    }
+
+    async function lookup() {
+      const msg = document.getElementById('msg');
+      const out = document.getElementById('out');
+      msg.textContent = '';
+      out.innerHTML = '';
+
+      const year = document.getElementById('year').value;
+      const zip = normalizeZip(document.getElementById('zip').value);
+
+      if (!/^\d{5}$/.test(zip)) {
+        msg.textContent = 'Please enter a 5-digit ZIP.';
+        return;
+      }
+
+      try {
+        // 1) Find candidate counties for ZIP
+        const idx = await loadZipIndex(year);
+        const rec = idx.find(e => e.zip === zip);
+        if (!rec) {
+          msg.textContent = `ZIP ${zip} is not in the index. Try a nearby residential ZIP (not PO Box).`;
+          return;
+        }
+        if (!rec.counties?.length) {
+          msg.textContent = `ZIP ${zip} returned no counties.`;
+          return;
+        }
+
+        // 2) Pick the top county by share (simplest for demo)
+        const [fips /*, share */] = rec.counties[0];
+        const countyUrl = `${BASE}years/${year}/by-county/${fips}.json`;
+
+        // 3) Fetch county carriers (+ embedded plans if present)
+        const county = await fetchJson(countyUrl);
+
+        // 4) Render
+        renderCountySummary(out, county);
+
+        // 5) If ZIP spans multiple counties, show a helpful hint
+        if (rec.counties.length > 1) {
+          const hint = document.createElement('div');
+          hint.className = 'muted';
+          const other = rec.counties.slice(1).map(([f]) => f).join(', ');
+          hint.textContent = `Note: ZIP ${zip} spans multiple counties; showing top match FIPS ${fips}. Others: ${other || '—'}.`;
+          out.appendChild(hint);
+        }
+      } catch (err) {
+        msg.textContent = 'Error: ' + (err?.message || err);
+      }
+    }
+
+    document.getElementById('go').addEventListener('click', lookup);
+    document.getElementById('zip').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') lookup();
+    });
+  </script>
+</body>
+</html>
