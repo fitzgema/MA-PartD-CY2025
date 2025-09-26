@@ -4,13 +4,18 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "node scripts/build_ma_dataset.mjs"
+    "build:ma": "node scripts/build_ma_dataset.mjs",
+    "resolve:sb": "node scripts/resolve_sb_urls.mjs",
+    "build:benefits": "node scripts/build_ma_benefits.mjs",
+    "build": "npm run build:ma && npm run resolve:sb && npm run build:benefits"
   },
   "dependencies": {
     "adm-zip": "^0.5.10",
     "csv-parse": "^5.5.6",
     "fast-glob": "^3.3.2",
     "node-fetch": "^3.3.2",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "pdf-parse": "^1.1.1",
+    "p-limit": "^5.0.0"
   }
 }
