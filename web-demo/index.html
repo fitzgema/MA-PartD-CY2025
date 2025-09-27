@@ -5,12 +5,12 @@
   <title>Medicare Advantage Carrier Lookup (Static JSON)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root { --border:#e5e7eb; --muted:#666; --bg:#f9fafb; --bg-hover:#f3f4f6; --danger:#b00; --pad:24px; }
+    :root { --border:#e5e7eb; --muted:#666; --bg:#f9fafb; --bg-hover:#f3f4f6; --danger:#b00; --ok:#157347; --pad:24px; }
     * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: var(--pad); }
-    h1 { margin: 0 0 16px; font-size: 20px; }
+    h1 { margin: 0 0 16px; font-size: 22px; }
     label { margin-right: 12px; display: inline-flex; gap: 8px; align-items: center; }
-    input, select, button { font-size: 16px; padding: 6px 10px; }
+    input, select, button, textarea { font-size: 16px; padding: 6px 10px; }
     button { cursor: pointer; }
     #msg { margin: 16px 0; color: var(--danger); white-space: pre-wrap; }
     #out { margin-top: 12px; }
@@ -19,16 +19,14 @@
     .badge { font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
     .muted { color: var(--muted); font-size: 13px; }
     .btn-secondary { border:1px solid var(--border); background:#fafafa; border-radius:8px; padding:6px 10px; font-size:13px; }
-
-    /* plan chip */
-    .plan-chip {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 3px 8px; margin: 4px 6px 0 0;
-      border: 1px solid var(--border); border-radius: 9999px;
-      background: var(--bg); font-size: 12px; cursor: pointer; user-select: none;
-    }
-    .plan-chip:hover { background: var(--bg-hover); }
+    .plan-chip { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; margin:4px 6px 0 0; border:1px solid var(--border); border-radius:9999px; background:var(--bg); font-size:12px; cursor:pointer; user-select:none; }
+    .plan-chip:hover { background:var(--bg-hover); }
     .carrier .name { cursor: pointer; }
+
+    /* Data source panel */
+    details#ds { margin-top: 10px; }
+    #bases { width: min(880px, 96vw); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #basesInfo { margin-top: 6px; font-size: 12px; color: #555; white-space: pre-wrap; }
   </style>
 
   <!-- Assets live alongside this file in web-demo/ -->
@@ -53,6 +51,18 @@
     <button id="dump" type="button" class="btn-secondary" title="Print all embedded plan JSON below">Show all plan JSON (dump)</button>
   </div>
 
+  <!-- Data source controls: paste one or more dataset bases (pipe/comma separated). Saved to localStorage. -->
+  <details id="ds">
+    <summary>Data source (advanced)</summary>
+    <div class="row" style="margin-top:8px;">
+      <input id="bases" placeholder="e.g. https://cdn.jsdelivr.net/gh/<user>/<repo>@main/ | https://raw.githubusercontent.com/<user>/<repo>/main/" />
+      <button id="apply" type="button">Apply</button>
+      <button id="reset" type="button">Reset</button>
+      <button id="test" type="button">Test</button>
+    </div>
+    <div id="basesInfo" class="muted"></div>
+  </details>
+
   <div id="msg" class="muted" aria-live="polite"></div>
   <div id="out"></div>
   <div id="dumpZone"></div>
@@ -62,6 +72,7 @@
     const $ = (id) => document.getElementById(id);
     const setMsg = (t, color='#b00') => { const m = $('msg'); m.style.color=color; m.textContent = t; };
     const info = (t) => setMsg(t, '#555');
+    const ok = (t) => setMsg(t, 'var(--ok)');
     const pad3 = (v) => String(v ?? '').replace(/\D/g, '').padStart(3, '0');
     const normalizeZip = (z) => String(z ?? '').replace(/\D/g, '').padStart(5, '0');
 
@@ -70,7 +81,7 @@
     }
 
     // ----------------- Multi-source dataset bases -----------------
-    // Repo root even though this file lives in /web-demo/
+    // Repo root (even though this file lives in /web-demo/)
     const PAGES_BASE = (() => {
       const { origin, pathname } = location;
       const m = pathname.match(/^(.*?)(\/web-demo\/.*)$/);
@@ -83,25 +94,36 @@
     const CDN_BASE = (GH_USER && GH_REPO) ? `https://cdn.jsdelivr.net/gh/${GH_USER}/${GH_REPO}@main/` : null;
     const RAW_BASE = (GH_USER && GH_REPO) ? `https://raw.githubusercontent.com/${GH_USER}/${GH_REPO}/main/` : null;
 
-    // Optional override via ?data=BASE1|BASE2 (each must end with / or we'll add it)
-    function parseBasesParam() {
-      const v = new URLSearchParams(location.search).get('data');
-      if (!v) return [];
-      return v.split(/[|,;\s]+/).filter(Boolean).map(b => b.endsWith('/') ? b : (b + '/'));
-    }
+    const addSlash = (s) => s ? (s.endsWith('/') ? s : s + '/') : s;
+    const parseList = (s) => (s || '').split(/[|,;\s]+/).map(x => addSlash(x.trim())).filter(Boolean);
 
-    // Known optional dataset repo fallbacks (safe to leave; harmless if missing)
+    // Allow override via ?data=
+    const QUERY_BASES = parseList(new URLSearchParams(location.search).get('data') || '');
+    const SAVED_BASES = parseList(localStorage.getItem('dataBases') || '');
+
+    // Known optional fallbacks (edit/remove if you don't use them)
     const KNOWN_FALLBACKS = [
-      'https://cdn.jsdelivr.net/gh/fitzgema/MA-PartD-Static-Dataset@main/',
-      'https://raw.githubusercontent.com/fitzgema/MA-PartD-Static-Dataset/main/'
+      // Example external dataset repo(s). Leave empty or replace with your actual dataset repo(s).
+      // 'https://cdn.jsdelivr.net/gh/youruser/your-dataset-repo@main/',
+      // 'https://raw.githubusercontent.com/youruser/your-dataset-repo/main/'
     ];
 
-    const DATA_BASES = Array.from(new Set([
-      PAGES_BASE,
-      ...parseBasesParam(),
-      CDN_BASE, RAW_BASE,
-      ...KNOWN_FALLBACKS
-    ].filter(Boolean)));
+    let DATA_BASES = Array.from(new Set(
+      [PAGES_BASE, ...QUERY_BASES, ...SAVED_BASES, CDN_BASE, RAW_BASE, ...KNOWN_FALLBACKS]
+        .filter(Boolean)
+        .map(addSlash)
+    ));
+
+    function refreshBasesInfo() {
+      $('bases').value = DATA_BASES.join(' | ');
+      $('basesInfo').textContent = 'Active bases (in order):\n' + DATA_BASES.join('\n');
+    }
+    function setBases(list) {
+      DATA_BASES = Array.from(new Set(list.filter(Boolean).map(addSlash)));
+      localStorage.setItem('dataBases', DATA_BASES.join('|'));
+      refreshBasesInfo();
+    }
+    refreshBasesInfo();
 
     async function fetchJsonFromAny(relPath) {
       const errors = [];
@@ -227,7 +249,6 @@
         top.appendChild(count);
         row.appendChild(top);
 
-        // Plan chips
         if (n) {
           const chips = document.createElement('div');
           plansArray.forEach(p => {
@@ -239,7 +260,6 @@
             chip.className = 'plan-chip';
             chip.textContent = `${ids.contract} ${ids.pbp}${premium!=null ? ` — $${Number(premium).toFixed(2)}/mo` : ''}`;
 
-            // Prefer full plan JSON; fallback to embedded object
             const loader = async () => {
               try {
                 const { json, url } = await loadFullPlan(p);
@@ -260,7 +280,6 @@
                 window.PlanViewer?.show?.(data, { title: `${ids.contract} - ${ids.pbp}`, hint: data.__provenance });
               });
             }
-
             chips.appendChild(chip);
           });
           row.appendChild(chips);
@@ -288,7 +307,8 @@
         if (!(rec.counties?.length)) return setMsg(`ZIP ${zip} returned no counties.`);
 
         const [fips] = rec.counties[0];
-        const { json: county } = await fetchJsonFromAny(`years/${year}/by-county/${fips}.json`);
+        const { json: county, url } = await fetchJsonFromAny(`years/${year}/by-county/${fips}.json`);
+        console.log('County from:', url);
         renderCountySummary($('out'), county);
 
         if (rec.counties.length > 1) {
@@ -298,7 +318,7 @@
           hint.textContent = `Note: ZIP ${zip} spans multiple counties; showing top match FIPS ${fips}. Others: ${other || '—'}.`;
           $('out').appendChild(hint);
         }
-        info(`Loaded county ${fips}. Click a carrier or plan chip.`);
+        ok(`Loaded county ${fips}. Click a carrier or plan chip.`);
       } catch (e) {
         console.error(e); setMsg('Error: ' + (e?.message || e));
       }
@@ -319,6 +339,18 @@
       info(`Dumped ${allPlans.length} plan objects below.`);
     }
 
+    // Data source UI
+    $('apply').onclick = () => setBases(parseList($('bases').value));
+    $('reset').onclick = () => setBases([PAGES_BASE, CDN_BASE, RAW_BASE].filter(Boolean));
+    $('test').onclick = async () => {
+      $('msg').textContent = '';
+      try {
+        const y = $('year').value;
+        const { url } = await fetchJsonFromAny(`years/${y}/zip-index.json`);
+        ok(`OK: ${url}`);
+      } catch (e) { setMsg('Error: ' + (e?.message || e)); }
+    };
+
     // Wire up
     window.addEventListener('DOMContentLoaded', () => {
       if (typeof PlanViewer?.init === 'function') { try { PlanViewer.init(); } catch {} }
@@ -327,8 +359,5 @@
       $('dump').addEventListener('click', dumpAllPlans);
     });
   </script>
-</body>
-</html>
-
 </body>
 </html>
