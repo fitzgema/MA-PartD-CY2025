@@ -21,9 +21,11 @@
     button { cursor: pointer; }
     #msg { margin: 16px 0; color: var(--danger); white-space: pre-wrap; }
     #out { margin-top: 12px; }
+    .row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .carrier { padding: 8px 0; border-bottom: 1px solid #eee; }
     .badge { font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
     .muted { color: var(--muted); font-size: 13px; }
+    .btn-secondary { border:1px solid var(--border); background:#fafafa; border-radius:8px; padding:6px 10px; font-size:13px; }
 
     /* plan chip */
     .plan-chip {
@@ -35,18 +37,43 @@
     }
     .plan-chip:hover { background: var(--bg-hover); }
     .carrier .name { cursor: pointer; }
-  </style>
 
-  <!-- Viewer + Picker -->
-  <link rel="stylesheet" href="plan-viewer.css" />
-  <script src="plan-viewer.js" defer></script>
-  <script src="plan-picker.js" defer></script>
+    /* ---- Plan Viewer Drawer (inlined) ---- */
+    #pv-drawer {
+      position: fixed; top: 0; right: 0; height: 100vh; width: min(720px, 95vw);
+      background: #fff; border-left: 1px solid #e5e7eb; box-shadow: -10px 0 25px rgba(0,0,0,0.08);
+      transform: translateX(100%); transition: transform 0.25s ease-in-out; z-index: 9999;
+      display: flex; flex-direction: column; font-family: inherit;
+    }
+    #pv-drawer.open { transform: translateX(0); }
+    #pv-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #f3f4f6; }
+    #pv-title { font-weight:600; font-size:16px; }
+    #pv-actions { display:flex; gap:8px; }
+    .pv-btn { border:1px solid #e5e7eb; background:#f9fafb; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
+    .pv-btn:hover { background:#f3f4f6; }
+    #pv-body { overflow:auto; padding:8px 16px 24px; height:100%; }
+    #pv-meta { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:6px 12px; margin:8px 0 12px; }
+    .pv-kv { border:1px solid #f3f4f6; border-radius:8px; padding:8px; background:#fafafa; font-size:12px; }
+    .pv-kv .k { color:#6b7280; display:block; margin-bottom:2px; }
+    #pv-tabs { display:flex; border-bottom:1px solid #f3f4f6; margin:8px 0 12px; }
+    .pv-tab { padding:8px 12px; margin-bottom:-1px; border:1px solid transparent; border-top-left-radius:8px; border-top-right-radius:8px; cursor:pointer; font-size:13px; }
+    .pv-tab.active { background:#fff; border:1px solid #e5e7eb; border-bottom-color:#fff; }
+    #pv-content > .pv-panel { display:none; }
+    #pv-content > .pv-panel.active { display:block; }
+    .pv-tree { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; line-height:1.45; }
+    .pv-tree details { padding-left: 12px; margin-left: 12px; border-left: 1px dashed #e5e7eb; }
+    .pv-tree summary { cursor:pointer; list-style:none; }
+    .pv-tree .pv-leaf { padding-left:28px; }
+    .pv-muted { color:#6b7280; }
+    .pv-toast { position: fixed; bottom: 16px; right: 16px; background: #111827; color: white; padding: 8px 12px; border-radius: 8px; font-size: 12px; z-index: 10000; opacity: .98; }
+    pre.dump { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#fafafa; border:1px solid #eee; padding:10px; border-radius:8px; white-space:pre-wrap; }
+  </style>
 </head>
 
 <body>
   <h1>Medicare Advantage Carrier Lookup (Static JSON)</h1>
 
-  <div role="form" aria-label="Lookup">
+  <div role="form" aria-label="Lookup" class="row">
     <label for="zip">ZIP
       <input id="zip" placeholder="e.g., 55379" inputmode="numeric" maxlength="5" />
     </label>
@@ -56,36 +83,50 @@
       </select>
     </label>
     <button id="go" type="button">Lookup</button>
+    <button id="dump" type="button" class="btn-secondary" title="Print all plans' JSON below once loaded">Show all plan JSON (dump)</button>
   </div>
 
   <div id="msg" class="muted" aria-live="polite"></div>
   <div id="out"></div>
+  <div id="dumpZone"></div>
+
+  <!-- Inlined Plan Viewer + Picker (no external dependencies) -->
+  <div id="pv-drawer" aria-hidden="true">
+    <div id="pv-header">
+      <div id="pv-title">Plan Details</div>
+      <div id="pv-actions">
+        <button class="pv-btn" id="pv-download">Download JSON</button>
+        <button class="pv-btn" id="pv-copy">Copy JSON</button>
+        <button class="pv-btn" id="pv-close">Close</button>
+      </div>
+    </div>
+    <div id="pv-body">
+      <div id="pv-meta"></div>
+      <div id="pv-tabs">
+        <div class="pv-tab active">Summary</div>
+        <div class="pv-tab">Raw JSON</div>
+        <div class="pv-tab">Flat Table</div>
+      </div>
+      <div id="pv-content">
+        <div class="pv-panel active" id="pv-summary"></div>
+        <div class="pv-panel" id="pv-raw"></div>
+        <div class="pv-panel" id="pv-flat"></div>
+      </div>
+    </div>
+  </div>
 
   <script type="module">
-    // --- Diagnostics banner helper ---
+    // ---------- Helpers ----------
     const $ = (id) => document.getElementById(id);
-    function errorMsg(msg) { const m = $('msg'); m.style.color = '#b00'; m.textContent = String(msg || 'Unknown error'); }
-    function infoMsg(msg)  { const m = $('msg'); m.style.color = '#555'; m.textContent = String(msg); }
+    const msg = (t, color='#b00') => { const m = $('msg'); m.style.color=color; m.textContent = t; };
+    const info = (t) => msg(t, '#555');
 
-    // Use the actual globals if loaded, else fallbacks that scream loudly
-    const PlanViewer = (globalThis.PlanViewer ?? {
-      __fallback: true,
-      init(){ console.warn('PlanViewer fallback in use (not loaded).'); },
-      register(node, plan){ node.addEventListener('click', () => alert('PlanViewer not loaded.\n\n' + JSON.stringify(plan, null, 2))); },
-      show(plan){ alert('PlanViewer not loaded.\n\n' + JSON.stringify(plan, null, 2)); }
-    });
-    const PlanPicker = (globalThis.PlanPicker ?? {
-      __fallback: true,
-      open(plans, opts){ alert('PlanPicker not loaded.\n\n' + (opts?.title||'') + '\n' + plans.length + ' plan(s)'); }
-    });
+    if (location.protocol === 'file:') {
+      info('⚠️ You are viewing via file://. fetch() to JSON will fail. Use a local web server (e.g., `npx serve`).');
+    }
 
-    // Compute BASE so it works on GH Pages subfolders or local dev
     const BASE = (() => {
-      const { origin, pathname, protocol } = location;
-      if (protocol === 'file:') {
-        console.warn('Serving from file:// — fetch() will fail. Use a local web server.');
-        infoMsg('Tip: run a local web server (e.g., `npx serve`) — fetch() fails on file://');
-      }
+      const { origin, pathname } = location;
       const m = pathname.match(/^(.*?)(\/web-demo\/.*)$/);
       if (m) return origin + m[1] + '/';
       return origin + pathname.replace(/[^/]*$/, ''); // current dir
@@ -93,69 +134,188 @@
     console.log('[BASE]', BASE);
 
     const normalizeZip = (z) => String(z ?? '').replace(/\D/g, '').padStart(5, '0');
-
-    async function fetchJson(url) {
+    const fetchJson = async (url) => {
       console.log('[fetch]', url);
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText} @ ${url}`);
-      return res.json();
-    }
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText} @ ${url}`);
+      return r.json();
+    };
     const loadZipIndex = (year) => fetchJson(`${BASE}years/${year}/zip-index.json`);
 
-    async function tryFetch(url) {
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      return { json: await res.json(), url };
+    // ---------- PlanViewer (inlined) ----------
+    const PV_state = { data:null, meta:null, activeTab:0 };
+    function PV_el(tag, attrs = {}, children = []) {
+      const n = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        if (k === 'class') n.className = v;
+        else if (k === 'html') n.innerHTML = v;
+        else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v);
+        else n.setAttribute(k, v);
+      }
+      ([].concat(children)).forEach(c => c!=null && n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+      return n;
+    }
+    function PV_flatten(obj, prefix = '') {
+      const out = {}; const seen = new WeakSet();
+      (function recur(o, pfx) {
+        if (o && typeof o === 'object') {
+          if (seen.has(o)) { out[pfx || '(root)'] = '[Circular]'; return; }
+          seen.add(o);
+          if (Array.isArray(o)) o.forEach((v, i) => recur(v, pfx ? `${pfx}[${i}]` : `[${i}]`));
+          else for (const [k, v] of Object.entries(o)) recur(v, pfx ? `${pfx}.${k}` : k);
+        } else out[pfx || '(root)'] = o;
+      })(obj, prefix);
+      return out;
+    }
+    function PV_tree(obj, key=null) {
+      if (obj === null || typeof obj !== 'object') {
+        return PV_el('span', { class:'pv-leaf' }, `${key!==null?key+': ':''}${JSON.stringify(obj)}`);
+      }
+      const isArr = Array.isArray(obj);
+      const details = PV_el('details', {}, [
+        PV_el('summary', {}, [
+          PV_el('span', { class:'pv-muted' }, key!==null?key+': ':''),
+          PV_el('strong', {}, isArr?`Array(${obj.length})`:'Object')
+        ])
+      ]);
+      Object.entries(obj).forEach(([k,v]) => {
+        const child = PV_tree(v, k);
+        details.appendChild(child.nodeName==='DETAILS' ? child : PV_el('div', {}, child));
+      });
+      return details;
+    }
+    function PV_summarize(p, meta) {
+      const g = (k, d='') => p?.[k] ?? p?.[k.toLowerCase()] ?? d;
+      const contract = g('contract') || g('contractId') || g('contract_id') || g('ContractID') || g('contractNumber');
+      const pbp = g('pbp') || g('planId') || g('plan_id') || g('PlanID') || g('PBP');
+      const name = g('planName') || g('name') || g('plan_name');
+      const type = g('planType') || g('type') || g('PlanType') || g('segmentName');
+      const year = g('year') || g('planYear') || g('PlanYear');
+      const org = g('orgName') || g('organizationName') || g('carrier') || g('ParentOrg');
+      const county = g('county') || g('CountyName') || g('serviceArea');
+      const premium = g('premium') || g('monthlyPremium') || g('MonthlyPremium') || g('premium_total');
+      const star = g('star') || g('StarRating') || g('starRating');
+      const moop = g('moop') || g('maxOutOfPocket') || g('max_out_of_pocket');
+
+      const items = [
+        ...(meta?.hint ? [['Source', meta.hint]] : []),
+        ['Contract', contract], ['Plan', pbp], ['Name', name], ['Type', type],
+        ['Year', year], ['Org', org], ['County/Area', county],
+        ['Premium', premium], ['Star', star], ['Max OOP', moop],
+      ].filter(([,v]) => v != null && v !== '');
+      const grid = PV_el('div', { id:'pv-meta' });
+      items.forEach(([k, v]) => {
+        grid.appendChild(PV_el('div', { class:'pv-kv' }, [
+          PV_el('span', { class:'k' }, k),
+          PV_el('div', { class:'v' }, String(v))
+        ]));
+      });
+      return grid;
+    }
+    function PV_open(plan, meta = {}) {
+      PV_state.data = plan; PV_state.meta = meta;
+      $('pv-title').textContent = meta?.title ||
+        [plan?.contract || plan?.contractId || plan?.contract_id, plan?.planId || plan?.pbp || plan?.plan_id]
+          .filter(Boolean).join(' - ') || 'Plan Details';
+
+      const summaryEl = $('pv-summary'); const rawEl = $('pv-raw'); const flatEl = $('pv-flat');
+      summaryEl.innerHTML = ''; rawEl.innerHTML = ''; flatEl.innerHTML = '';
+
+      summaryEl.appendChild(PV_summarize(plan, meta));
+      const pre = PV_el('pre', { class:'pv-tree' }); pre.appendChild(PV_tree(plan));
+      rawEl.appendChild(pre);
+      const flat = PV_flatten(plan);
+      const table = PV_el('table', { class:'pv-table' });
+      const thead = PV_el('thead', {}, PV_el('tr', {}, [PV_el('th', {}, 'Key'), PV_el('th', {}, 'Value')]));
+      const tbody = PV_el('tbody');
+      Object.entries(flat).forEach(([k, v]) => tbody.appendChild(PV_el('tr', {}, [PV_el('td', {}, k), PV_el('td', {}, String(v))])));
+      Object.assign(table.style, { width:'100%', borderCollapse:'collapse', fontSize:'12px' });
+      ;[...thead.querySelectorAll('th')].forEach(th => Object.assign(th.style, { textAlign:'left', border:'1px solid #f3f4f6', padding:'6px 8px' }));
+      ;[...tbody.querySelectorAll('td')].forEach(td => Object.assign(td.style, { textAlign:'left', border:'1px solid #f3f4f6', padding:'6px 8px' }));
+      table.appendChild(thead); table.appendChild(tbody); flatEl.appendChild(table);
+
+      $('pv-drawer').classList.add('open'); $('pv-drawer').setAttribute('aria-hidden','false');
+    }
+    function PV_close(){ $('pv-drawer')?.classList.remove('open'); $('pv-drawer')?.setAttribute('aria-hidden','true'); }
+    $('pv-close').onclick = PV_close;
+    $('pv-copy').onclick = () => { try { navigator.clipboard.writeText(JSON.stringify(PV_state.data, null, 2)); toast('Copied JSON'); } catch {} };
+    $('pv-download').onclick = () => {
+      try {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(PV_state.data, null, 2)], { type:'application/json' }));
+        a.download = (PV_state.meta?.downloadName || 'plan') + '.json';
+        document.body.appendChild(a); a.click(); a.remove();
+      } catch {}
+    };
+    // Tabs
+    [...document.querySelectorAll('#pv-tabs .pv-tab')].forEach((tab, i) => {
+      tab.addEventListener('click', () => {
+        [...document.querySelectorAll('#pv-tabs .pv-tab')].forEach((t, idx)=>t.classList.toggle('active', idx===i));
+        [...document.querySelectorAll('#pv-content .pv-panel')].forEach((p, idx)=>p.classList.toggle('active', idx===i));
+      });
+    });
+    function toast(t){ const d=document.createElement('div'); d.className='pv-toast'; d.textContent=t; document.body.appendChild(d); setTimeout(()=>d.remove(),2200); }
+
+    // ---------- PlanPicker (inlined) ----------
+    function openPlanPicker(plans = [], { title = 'Select a plan' } = {}) {
+      if (!Array.isArray(plans) || !plans.length) { toast('No plans for this carrier.'); return; }
+      const overlay = document.createElement('div');
+      Object.assign(overlay.style, { position:'fixed', inset:0, background:'rgba(0,0,0,.35)', zIndex: 9998,
+        display:'flex', alignItems:'center', justifyContent:'center' });
+      const modal = document.createElement('div');
+      Object.assign(modal.style, { width:'min(720px,96vw)', maxHeight:'80vh', overflow:'auto', background:'#fff',
+        borderRadius:'12px', boxShadow:'0 10px 40px rgba(0,0,0,.2)', padding:'12px 16px' });
+      const h = document.createElement('div'); h.textContent = title; h.style.fontWeight='600'; h.style.marginBottom='8px';
+      const list = document.createElement('div');
+      plans.forEach(p => {
+        const contract = p.contract || p.contractId || p.contract_id || '';
+        const pbp = p.pbp || p.planId || p.plan_id || '';
+        const name = p.planName || p.name || '';
+        const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
+        const row = document.createElement('button');
+        row.type='button';
+        Object.assign(row.style, { width:'100%', textAlign:'left', padding:'10px 12px', margin:'6px 0',
+          border:'1px solid #e5e7eb', borderRadius:'10px', background:'#fafafa', cursor:'pointer' });
+        row.onmouseenter = () => row.style.background = '#f3f4f6';
+        row.onmouseleave = () => row.style.background = '#fafafa';
+        row.textContent = `${contract}${pbp?'-'+pbp:''}  ${name}${premium!=null?` — $${Number(premium).toFixed(2)}/mo`:''}`;
+        row.onclick = () => { PV_open(p, { title: `${contract}${pbp?' - '+pbp:''}`, hint:'source: carrier → PlanPicker' }); overlay.remove(); };
+        list.appendChild(row);
+      });
+      const close = document.createElement('button');
+      close.textContent = 'Close'; close.className='pv-btn'; close.style.marginTop='8px';
+      close.onclick = () => overlay.remove();
+      modal.appendChild(h); modal.appendChild(list); modal.appendChild(close);
+      overlay.appendChild(modal); document.body.appendChild(overlay);
     }
 
-    async function loadPlanJSON(contract, pbp, year) {
-      const candidates = [
-        `${BASE}years/${year}/by-plan/${contract}-${pbp}.json`,
-        `${BASE}years/${year}/plans/${contract}-${pbp}.json`,
-        `${BASE}years/${year}/plans/${contract}/${pbp}.json`,
-        `${BASE}years/${year}/plan-details/${contract}-${pbp}.json`,
-      ];
-      const errors = [];
-      for (const u of candidates) {
-        try { return await tryFetch(u); } catch (e) { errors.push(`${u} → ${e.message}`); }
-      }
-      throw new Error(`No plan JSON found.\nTried:\n- ${errors.join('\n- ')}`);
-    }
+    // ---------- Rendering ----------
+    let LAST_COUNTY = null;
 
     function renderCountySummary(parent, county) {
-      if (!county) { errorMsg('County JSON empty.'); return; }
-      console.log('[county]', county);
+      LAST_COUNTY = county;
       parent.innerHTML = '';
-
+      if (!county) return msg('County JSON empty.');
       const header = document.createElement('h3');
       header.textContent = `${county.county_name}, ${county.state} — ${(county.carriers?.length ?? 0)} carriers`;
       parent.appendChild(header);
 
       const carriers = county.carriers ?? [];
-      if (!Array.isArray(carriers) || carriers.length === 0) {
-        errorMsg('No carriers found in county JSON.');
-        return;
-      }
+      if (!carriers.length) { return msg('No carriers found in county JSON.'); }
 
       carriers.forEach(c => {
         const row = document.createElement('div');
         row.className = 'carrier';
 
-        const top = document.createElement('div');
+        const top = document.createElement('div'); top.className='row';
 
         const name = document.createElement('strong');
         name.className = 'name';
         name.textContent = c.orgName || 'Carrier';
         name.title = 'Click to choose a plan';
         name.tabIndex = 0;
-        name.addEventListener('click', () => {
-          const plans = Array.isArray(c.plans) ? c.plans : [];
-          console.log('[PlanPicker.open] plans:', plans.length, plans);
-          PlanPicker.open(plans, { title: `${c.orgName || 'Carrier'} — choose a plan` });
-        });
-        name.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); name.click(); }
-        });
+        name.addEventListener('click', () => openPlanPicker(Array.isArray(c.plans)?c.plans:[], { title: `${c.orgName || 'Carrier'} — choose a plan` }));
+        name.addEventListener('keydown', (e) => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); name.click(); } });
 
         const contracts = document.createElement('span');
         contracts.className = 'badge';
@@ -179,20 +339,13 @@
             const chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'plan-chip';
-
             const contract = p.contract || p.contractId || p.contract_id || '';
             const pbp = p.pbp || p.planId || p.plan_id || '';
             const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
             chip.textContent = `${contract}${pbp ? ' ' + pbp : ''}${premium!=null ? ` — $${Number(premium).toFixed(2)}/mo` : ''}`.trim();
-            chip.setAttribute('aria-label', `Open details for ${contract} ${pbp}`);
-
-            chip.addEventListener('click', () => console.log('[chip click]', { contract, pbp, premium }));
-
-            PlanViewer.register(chip, p, {
-              title: `${contract}${pbp ? ' - ' + pbp : ''}`,
-              hint: 'source: county JSON'
+            chip.addEventListener('click', () => {
+              PV_open(p, { title: `${contract}${pbp ? ' - ' + pbp : ''}`, hint: 'source: county JSON' });
             });
-
             chips.appendChild(chip);
           });
           row.appendChild(chips);
@@ -208,67 +361,53 @@
     }
 
     async function lookup() {
-      const msg = $('msg');
-      const out = $('out');
-      msg.textContent = '';
-      out.innerHTML = '';
-
+      $('msg').textContent = ''; $('out').innerHTML = ''; $('dumpZone').innerHTML = '';
       const year = $('year').value;
       const zip = normalizeZip($('zip').value);
-
-      if (!/^\d{5}$/.test(zip)) return errorMsg('Please enter a 5-digit ZIP.');
+      if (!/^\d{5}$/.test(zip)) return msg('Please enter a 5-digit ZIP.');
 
       try {
-        if (!globalThis.PlanViewer) console.warn('globalThis.PlanViewer missing (using fallback).');
-        if (!globalThis.PlanPicker) console.warn('globalThis.PlanPicker missing (using fallback).');
-
         const idx = await loadZipIndex(year);
-        console.log('[zip-index entries]', idx?.length);
         const rec = idx.find(e => e.zip === zip);
-        if (!rec) return errorMsg(`ZIP ${zip} is not in the index. Try a nearby residential ZIP (not PO Box).`);
-        if (!(rec.counties?.length)) return errorMsg(`ZIP ${zip} returned no counties.`);
+        if (!rec) return msg(`ZIP ${zip} is not in the index. Try a nearby residential ZIP (not PO Box).`);
+        if (!(rec.counties?.length)) return msg(`ZIP ${zip} returned no counties.`);
 
         const [fips] = rec.counties[0];
         const countyUrl = `${BASE}years/${year}/by-county/${fips}.json`;
         const county = await fetchJson(countyUrl);
-        renderCountySummary(out, county);
+        renderCountySummary($('out'), county);
 
         if (rec.counties.length > 1) {
           const hint = document.createElement('div');
           hint.className = 'muted';
           const other = rec.counties.slice(1).map(([f]) => f).join(', ');
           hint.textContent = `Note: ZIP ${zip} spans multiple counties; showing top match FIPS ${fips}. Others: ${other || '—'}.`;
-          out.appendChild(hint);
+          $('out').appendChild(hint);
         }
-
-        infoMsg(`Loaded county ${fips}. Click a carrier or plan chip.`);
-      } catch (err) {
-        console.error(err);
-        errorMsg('Error: ' + (err?.message || err));
+        info(`Loaded county ${fips}. Click a carrier or plan chip.`);
+      } catch (e) {
+        console.error(e); msg('Error: ' + (e?.message || e));
       }
     }
 
-    function init() {
-      if (typeof PlanViewer.init === 'function') {
-        try { PlanViewer.init(); } catch (e) { console.warn('PlanViewer.init() error', e); }
-      }
-
-      $('go').addEventListener('click', lookup);
-      $('zip').addEventListener('keydown', (e) => { if (e.key === 'Enter') lookup(); });
-
-      document.addEventListener('click', (e) => {
-        if (e.target && e.target.closest('.plan-chip')) {
-          console.log('[bubble] .plan-chip click bubbled.');
-        }
-      });
-
-      console.log('[PlanViewer present?]', !!globalThis.PlanViewer, 'fallback?', !!PlanViewer.__fallback);
-      console.log('[PlanPicker present?]', !!globalThis.PlanPicker, 'fallback?', !!PlanPicker.__fallback);
+    // Dump all plan JSONs into the page for quick inspection
+    function dumpAllPlans() {
+      $('dumpZone').innerHTML = '';
+      if (!LAST_COUNTY) { return msg('Load a ZIP first, then click "Show all plan JSON".'); }
+      const carriers = LAST_COUNTY.carriers ?? [];
+      const allPlans = carriers.flatMap(c => Array.isArray(c.plans) ? c.plans : []);
+      if (!allPlans.length) { return msg('This county JSON does not embed plan objects. No plan data to dump.'); }
+      const pre = document.createElement('pre'); pre.className='dump';
+      pre.textContent = JSON.stringify(allPlans, null, 2);
+      $('dumpZone').appendChild(pre);
+      info(`Dumped ${allPlans.length} plan objects below.`);
     }
 
-    window.addEventListener('DOMContentLoaded', init);
+    // Wire up UI
+    $('go').addEventListener('click', lookup);
+    $('zip').addEventListener('keydown', (e) => { if (e.key === 'Enter') lookup(); });
+    $('dump').addEventListener('click', dumpAllPlans);
   </script>
 </body>
 </html>
 
-</html>
