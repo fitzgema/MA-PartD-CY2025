@@ -8,7 +8,6 @@ on:
       - 'web-demo/**'
       - 'data/**'
       - 'package.json'
-      - 'package-lock.json'
       - '.github/workflows/build-ma-dataset.yml'
   workflow_dispatch: {}
 
@@ -32,19 +31,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm          # now safe because package-lock.json exists
+          # ⬇️ removed "cache: npm" so a lock file isn't required
 
       - name: Install deps
-        run: npm ci           # requires the lock file
+        run: npm install --no-audit --no-fund
 
       - name: Build dataset (+ optional benefits)
         env:
           CMS_LANDSCAPE_URL: ${{ secrets.CMS_LANDSCAPE_URL }}
-          TARGET_YEARS: ${{ secrets.TARGET_YEARS }}   # e.g. 2025
-          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}     # optional
+          TARGET_YEARS: ${{ secrets.TARGET_YEARS }}
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }} # optional
         run: npm run build
 
-      # Serve the demo and the dataset from the same site root
       - name: Copy web-demo into dist
         run: |
           mkdir -p dist/web-demo
