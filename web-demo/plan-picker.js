@@ -1,4 +1,4 @@
-/*! PlanPicker — modal chooser that prefers full plan JSON before opening PlanViewer */
+/*! PlanPicker — modal chooser that prefers full plan JSON (contract+PBP+segment/CMS key) before opening PlanViewer */
 (function () {
   const PP = {
     open(plans, opts = {}) {
@@ -34,9 +34,13 @@
 
       const list = document.createElement('div');
 
+      const pad3 = (v) => String(v ?? '').replace(/\D/g, '').padStart(3, '0');
+
       plans.forEach((p) => {
-        const contract = p.contract || p.contractId || p.contract_id || '';
-        const pbp = p.pbp || p.planId || p.plan_id || '';
+        const contract = (p.contract || p.contractId || p.contract_id || '').toString().toUpperCase().trim();
+        const pbp = pad3(p.pbp ?? p.planId ?? p.plan_id ?? p.PBP ?? '');
+        const segment = pad3(p.segmentId ?? p.segment_id ?? p.segment ?? '000');
+        const cmsKey = p.cmsPlanKey || p.CMSPlanKey || `${(document.getElementById('year')?.value || '2025')}-${contract}-${pbp}-${segment}`;
         const name = p.planName || p.name || '';
         const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
 
@@ -54,31 +58,31 @@
         });
         row.onmouseenter = () => (row.style.background = '#f3f4f6');
         row.onmouseleave = () => (row.style.background = '#fafafa');
-        row.textContent = `${contract}${pbp ? '-' + pbp : ''}  ${name}${
+        row.textContent = `${contract}-${pbp}-${segment}  ${name}${
           premium != null ? ` — $${Number(premium).toFixed(2)}/mo` : ''
         }`;
 
         row.addEventListener('click', async () => {
           try {
-            const yr = document.getElementById('year')?.value || '2025';
+            const year = document.getElementById('year')?.value || '2025';
             const loader = window.__loadPlanJSON;
             if (typeof loader === 'function' && contract && pbp) {
-              const { json, url } = await loader(contract, pbp, yr);
+              const { json, url } = await loader(contract, pbp, year, segment, cmsKey);
               PlanViewer.show({ __provenance: url, ...json }, {
-                title: `${contract}${pbp ? ' - ' + pbp : ''}`,
+                title: `${contract} - ${pbp}`,
                 hint: `source: ${url}`,
               });
             } else {
-              // Fallback to minimal county-embedded object
+              // Fallback to embedded county object
               PlanViewer.show(p, {
-                title: `${contract}${pbp ? ' - ' + pbp : ''}`,
+                title: `${contract} - ${pbp}`,
                 hint: 'source: carrier → PlanPicker (county JSON fallback)',
               });
             }
           } catch (e) {
             console.warn('PlanPicker full-load failed; falling back to county object', e);
             PlanViewer.show(p, {
-              title: `${contract}${pbp ? ' - ' + pbp : ''}`,
+              title: `${contract} - ${pbp}`,
               hint: 'source: carrier → PlanPicker (county JSON fallback)',
             });
           }
