@@ -32,19 +32,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: npm          # now safe because package-lock.json exists
 
       - name: Install deps
-        run: npm ci
+        run: npm ci           # requires the lock file
 
       - name: Build dataset (+ optional benefits)
         env:
           CMS_LANDSCAPE_URL: ${{ secrets.CMS_LANDSCAPE_URL }}
-          TARGET_YEARS: ${{ secrets.TARGET_YEARS }} # e.g. "2025"
-          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}   # optional
+          TARGET_YEARS: ${{ secrets.TARGET_YEARS }}   # e.g. 2025
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}     # optional
         run: npm run build
 
-      # Put the demo alongside the dataset inside dist/
+      # Serve the demo and the dataset from the same site root
       - name: Copy web-demo into dist
         run: |
           mkdir -p dist/web-demo
