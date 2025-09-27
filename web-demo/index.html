@@ -58,7 +58,7 @@
   <div id="dumpZone"></div>
 
   <script type="module">
-    // ----------------- Small helpers -----------------
+    // ----------------- Utilities -----------------
     const $ = (id) => document.getElementById(id);
     const setMsg = (t, color='#b00') => { const m = $('msg'); m.style.color=color; m.textContent = t; };
     const info = (t) => setMsg(t, '#555');
@@ -69,37 +69,56 @@
       info('⚠️ file:// detected. Use a local server (e.g., `npx serve`) so fetch() can load JSON.');
     }
 
-    // ----------------- Multi-source bases -----------------
-    // PAGES_BASE: repo root even when this file is under /web-demo/
+    // ----------------- Multi-source dataset bases -----------------
+    // Repo root even though this file lives in /web-demo/
     const PAGES_BASE = (() => {
       const { origin, pathname } = location;
       const m = pathname.match(/^(.*?)(\/web-demo\/.*)$/);
       return origin + (m ? m[1] + '/' : pathname.replace(/[^/]*$/, ''));
     })();
 
-    // Infer <user>/<repo> for CDN/raw fallbacks (works on *.github.io project pages)
+    // Infer <user>/<repo> for CDN/raw
     const GH_USER = location.hostname.endsWith('github.io') ? location.hostname.split('.')[0] : null;
     const GH_REPO = (location.pathname.split('/')[1] || '').trim();
     const CDN_BASE = (GH_USER && GH_REPO) ? `https://cdn.jsdelivr.net/gh/${GH_USER}/${GH_REPO}@main/` : null;
     const RAW_BASE = (GH_USER && GH_REPO) ? `https://raw.githubusercontent.com/${GH_USER}/${GH_REPO}/main/` : null;
 
+    // Optional override via ?data=BASE1|BASE2 (each must end with / or we'll add it)
+    function parseBasesParam() {
+      const v = new URLSearchParams(location.search).get('data');
+      if (!v) return [];
+      return v.split(/[|,;\s]+/).filter(Boolean).map(b => b.endsWith('/') ? b : (b + '/'));
+    }
+
+    // Known optional dataset repo fallbacks (safe to leave; harmless if missing)
+    const KNOWN_FALLBACKS = [
+      'https://cdn.jsdelivr.net/gh/fitzgema/MA-PartD-Static-Dataset@main/',
+      'https://raw.githubusercontent.com/fitzgema/MA-PartD-Static-Dataset/main/'
+    ];
+
+    const DATA_BASES = Array.from(new Set([
+      PAGES_BASE,
+      ...parseBasesParam(),
+      CDN_BASE, RAW_BASE,
+      ...KNOWN_FALLBACKS
+    ].filter(Boolean)));
+
     async function fetchJsonFromAny(relPath) {
-      const bases = [PAGES_BASE, CDN_BASE, RAW_BASE].filter(Boolean);
       const errors = [];
-      for (const base of bases) {
+      for (const base of DATA_BASES) {
         const url = base + relPath;
         try {
           const r = await fetch(url, { cache: 'no-store' });
           if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
           return { json: await r.json(), url };
-        } catch (e) { errors.push(`${url} → ${e.message}`); }
+        } catch (e) { errors.push(`- ${url} → ${e.message}`); }
       }
-      throw new Error(`All sources failed for ${relPath}:\n- ${errors.join('\n- ')}`);
+      throw new Error(`All sources failed for ${relPath}:\n${errors.join('\n')}`);
     }
 
     const loadZipIndex = (year) => fetchJsonFromAny(`years/${year}/zip-index.json`).then(r => r.json);
 
-    // ---------- Full plan loader (tries many filenames + all bases) ----------
+    // ---------- Full plan loader (tries many filenames) ----------
     function extractIds(plan) {
       const year = $('year')?.value || '2025';
       const contract = (plan.contract || plan.contractId || plan.contract_id || plan.ContractID || '').toString().toUpperCase().trim();
@@ -112,7 +131,6 @@
     function relPlanPaths({ year, contract, pbp, segment, cmsKey }) {
       const y = year, c = contract, p = pbp, s = segment || '000';
       return [
-        // With segment (most complete)
         `years/${y}/by-plan/${c}-${p}-${s}.json`,
         `years/${y}/plan-details/${c}-${p}-${s}.json`,
         `years/${y}/plans/${c}-${p}-${s}.json`,
@@ -120,17 +138,14 @@
         `years/${y}/by-plan/${c}/${p}/${s}.json`,
         `years/${y}/plans/${c}/${p}-${s}.json`,
         `years/${y}/plans/${c}/${p}/${s}.json`,
-        // CMS plan key variants
         `years/${y}/by-plan/${cmsKey}.json`,
         `years/${y}/plan-details/${cmsKey}.json`,
         `years/${y}/plans/${cmsKey}.json`,
-        // Without segment
         `years/${y}/by-plan/${c}-${p}.json`,
         `years/${y}/plan-details/${c}-${p}.json`,
         `years/${y}/plans/${c}-${p}.json`,
         `years/${y}/by-plan/${c}/${p}.json`,
         `years/${y}/plans/${c}/${p}.json`,
-        // .min.json variants
         `years/${y}/by-plan/${c}-${p}-${s}.min.json`,
         `years/${y}/by-plan/${c}-${p}.min.json`,
       ];
@@ -196,9 +211,9 @@
         });
         name.addEventListener('keydown', (e) => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); name.click(); } });
 
+        const idsTxt = Array.isArray(c.contractIds) ? c.contractIds.join(', ') : '';
         const contracts = document.createElement('span');
         contracts.className = 'badge';
-        const idsTxt = Array.isArray(c.contractIds) ? c.contractIds.join(', ') : '';
         contracts.textContent = idsTxt;
 
         const count = document.createElement('span');
@@ -224,7 +239,7 @@
             chip.className = 'plan-chip';
             chip.textContent = `${ids.contract} ${ids.pbp}${premium!=null ? ` — $${Number(premium).toFixed(2)}/mo` : ''}`;
 
-            // Prefer full plan JSON; fallback to county object
+            // Prefer full plan JSON; fallback to embedded object
             const loader = async () => {
               try {
                 const { json, url } = await loadFullPlan(p);
@@ -234,19 +249,18 @@
               }
             };
 
-            // Use PlanViewer.register so viewer handles the click & opens the drawer
             if (window.PlanViewer?.register) {
               PlanViewer.register(chip, loader, {
                 title: `${ids.contract} - ${ids.pbp}`,
                 hint: 'Prefers full plan file; falls back to county JSON'
               });
             } else {
-              // Very defensive fallback
               chip.addEventListener('click', async () => {
                 const data = await loader();
                 window.PlanViewer?.show?.(data, { title: `${ids.contract} - ${ids.pbp}`, hint: data.__provenance });
               });
             }
+
             chips.appendChild(chip);
           });
           row.appendChild(chips);
@@ -290,7 +304,6 @@
       }
     }
 
-    // Dump all embedded plans (for quick inspection)
     function dumpAllPlans() {
       $('dumpZone').innerHTML = '';
       if (!LAST_COUNTY) { return setMsg('Load a ZIP first, then click "Show all plan JSON".'); }
@@ -306,14 +319,16 @@
       info(`Dumped ${allPlans.length} plan objects below.`);
     }
 
-    // ---------- Boot ----------
+    // Wire up
     window.addEventListener('DOMContentLoaded', () => {
-      // Let your PlanViewer create and wire its own drawer/buttons
-      if (typeof window.PlanViewer?.init === 'function') { try { window.PlanViewer.init(); } catch {} }
+      if (typeof PlanViewer?.init === 'function') { try { PlanViewer.init(); } catch {} }
       $('go').addEventListener('click', lookup);
       $('zip').addEventListener('keydown', (e) => { if (e.key === 'Enter') lookup(); });
       $('dump').addEventListener('click', dumpAllPlans);
     });
   </script>
+</body>
+</html>
+
 </body>
 </html>
