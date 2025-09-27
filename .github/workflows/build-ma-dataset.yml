@@ -1,46 +1,43 @@
 name: Build MA Static Dataset
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 9 1 * *'   # monthly
   push:
     branches: [ main ]
+    paths:
+      - "index.html"
+      - "plan-viewer.css"
+      - "plan-viewer.js"
+      - "plan-picker.js"
+      - "years/**"
+      - ".github/workflows/build-ma-dataset.yml"
+  workflow_dispatch: {}
+
+# Ensure only the newest run deploys; older runs are canceled automatically
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
-
-concurrency:
-  group: 'pages'
-  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
 
-      - name: Install deps
-        run: npm install
-
-      - name: Build dataset
-        env:
-          CMS_LANDSCAPE_URL: ${{ secrets.CMS_LANDSCAPE_URL }}
-          TARGET_YEARS: ${{ secrets.TARGET_YEARS || '2025' }}
-          USE_HUD: ${{ secrets.USE_HUD || '' }}
-        run: npm run build
-
-      - name: Include demo page (optional)
+      # Build step (static copy). Adjust includes as needed.
+      - name: Build static site
         run: |
-          mkdir -p dist/web-demo
-          cp -R web-demo/* dist/web-demo/ || true
+          rm -rf dist
+          mkdir -p dist
+          cp -a index.html plan-viewer.css plan-viewer.js plan-picker.js years dist/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -49,10 +46,10 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
