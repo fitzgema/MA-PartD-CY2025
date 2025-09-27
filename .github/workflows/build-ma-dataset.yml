@@ -1,23 +1,25 @@
-name: Build MA Static Dataset
+name: Build & Deploy MA Dataset + Demo (Pages, Option A)
 
 on:
   push:
     branches: [ main ]
     paths:
-      - "web-demo/**"
-      - "years/**"
-      - ".github/workflows/build-ma-dataset.yml"
+      - 'scripts/**'
+      - 'web-demo/**'
+      - 'data/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/build-ma-dataset.yml'
   workflow_dispatch: {}
-
-# Only keep the newest deployment run
-concurrency:
-  group: pages
-  cancel-in-progress: true
 
 permissions:
   contents: read
   pages: write
   id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -26,44 +28,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Helpful logs so you can verify where files are
-      - name: Show tree
-        shell: bash
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build dataset (+ optional benefits)
+        env:
+          CMS_LANDSCAPE_URL: ${{ secrets.CMS_LANDSCAPE_URL }}
+          TARGET_YEARS: ${{ secrets.TARGET_YEARS }} # e.g. "2025"
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}   # optional
+        run: npm run build
+
+      # Put the demo alongside the dataset inside dist/
+      - name: Copy web-demo into dist
         run: |
-          echo "pwd=$(pwd)"
-          ls -la
-          echo "--- web-demo ---"
-          ls -la web-demo || true
-          echo "--- years ---"
-          ls -la years || true
+          mkdir -p dist/web-demo
+          cp -R web-demo/* dist/web-demo/
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Build static site (copy web-demo → dist, add years if outside)
-        shell: bash
-        run: |
-          set -eux
-          rm -rf dist
-          mkdir -p dist
-          # Copy everything from the site folder
-          cp -a web-demo/. dist/
-          # If the dataset is at repo root, include it (no-op if already under web-demo)
-          if [ -d years ] && [ ! -d dist/years ]; then
-            cp -a years dist/
-          fi
-
-      - name: Upload artifact
+      - name: Upload Pages artifact (dist/)
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
+    runs-on: ubuntu-latest
     needs: build
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
