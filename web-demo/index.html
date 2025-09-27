@@ -32,7 +32,7 @@
       display: inline-flex; align-items: center; gap: 6px;
       padding: 3px 8px; margin: 4px 6px 0 0;
       border: 1px solid var(--border); border-radius: 9999px;
-      background: var(--bg); font-size: 12px; cursor: pointer;
+      background: #f9fafb; font-size: 12px; cursor: pointer;
       user-select: none;
     }
     .plan-chip:hover { background: var(--bg-hover); }
@@ -90,7 +90,7 @@
   <div id="out"></div>
   <div id="dumpZone"></div>
 
-  <!-- Inlined Plan Viewer + Picker (no external dependencies) -->
+  <!-- Inlined Plan Viewer UI -->
   <div id="pv-drawer" aria-hidden="true">
     <div id="pv-header">
       <div id="pv-title">Plan Details</div>
@@ -118,8 +118,8 @@
   <script type="module">
     // ---------- Helpers ----------
     const $ = (id) => document.getElementById(id);
-    const msg = (t, color='#b00') => { const m = $('msg'); m.style.color=color; m.textContent = t; };
-    const info = (t) => msg(t, '#555');
+    const setMsg = (t, color='#b00') => { const m = $('msg'); m.style.color=color; m.textContent = t; };
+    const info = (t) => setMsg(t, '#555');
 
     if (location.protocol === 'file:') {
       info('⚠️ You are viewing via file://. fetch() to JSON will fail. Use a local web server (e.g., `npx serve`).');
@@ -142,7 +142,7 @@
     };
     const loadZipIndex = (year) => fetchJson(`${BASE}years/${year}/zip-index.json`);
 
-    // ---------- PlanViewer (inlined) ----------
+    // ---------- PlanViewer (your inlined implementation) ----------
     const PV_state = { data:null, meta:null, activeTab:0 };
     function PV_el(tag, attrs = {}, children = []) {
       const n = document.createElement(tag);
@@ -247,7 +247,6 @@
         document.body.appendChild(a); a.click(); a.remove();
       } catch {}
     };
-    // Tabs
     [...document.querySelectorAll('#pv-tabs .pv-tab')].forEach((tab, i) => {
       tab.addEventListener('click', () => {
         [...document.querySelectorAll('#pv-tabs .pv-tab')].forEach((t, idx)=>t.classList.toggle('active', idx===i));
@@ -256,7 +255,28 @@
     });
     function toast(t){ const d=document.createElement('div'); d.className='pv-toast'; d.textContent=t; document.body.appendChild(d); setTimeout(()=>d.remove(),2200); }
 
-    // ---------- PlanPicker (inlined) ----------
+    // ---------- Full plan JSON loader (NEW) ----------
+    async function loadPlanJSON(contract, pbp, year) {
+      const candidates = [
+        `${BASE}years/${year}/by-plan/${contract}-${pbp}.json`,
+        `${BASE}years/${year}/plans/${contract}-${pbp}.json`,
+        `${BASE}years/${year}/plans/${contract}/${pbp}.json`,
+        `${BASE}years/${year}/plan-details/${contract}-${pbp}.json`,
+      ];
+      const errors = [];
+      for (const u of candidates) {
+        try {
+          const res = await fetch(u, { cache: 'no-store' });
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+          return { json: await res.json(), url: u };
+        } catch (e) { errors.push(`${u} → ${e.message}`); }
+      }
+      throw new Error(`No plan JSON found.\nTried:\n- ${errors.join('\n- ')}`);
+    }
+    // Expose for external plan-picker.js if you decide to use it
+    window.__loadPlanJSON = loadPlanJSON;
+
+    // ---------- PlanPicker (inlined, upgraded to use full JSON) ----------
     function openPlanPicker(plans = [], { title = 'Select a plan' } = {}) {
       if (!Array.isArray(plans) || !plans.length) { toast('No plans for this carrier.'); return; }
       const overlay = document.createElement('div');
@@ -267,11 +287,13 @@
         borderRadius:'12px', boxShadow:'0 10px 40px rgba(0,0,0,.2)', padding:'12px 16px' });
       const h = document.createElement('div'); h.textContent = title; h.style.fontWeight='600'; h.style.marginBottom='8px';
       const list = document.createElement('div');
+
       plans.forEach(p => {
         const contract = p.contract || p.contractId || p.contract_id || '';
         const pbp = p.pbp || p.planId || p.plan_id || '';
         const name = p.planName || p.name || '';
         const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
+
         const row = document.createElement('button');
         row.type='button';
         Object.assign(row.style, { width:'100%', textAlign:'left', padding:'10px 12px', margin:'6px 0',
@@ -279,9 +301,22 @@
         row.onmouseenter = () => row.style.background = '#f3f4f6';
         row.onmouseleave = () => row.style.background = '#fafafa';
         row.textContent = `${contract}${pbp?'-'+pbp:''}  ${name}${premium!=null?` — $${Number(premium).toFixed(2)}/mo`:''}`;
-        row.onclick = () => { PV_open(p, { title: `${contract}${pbp?' - '+pbp:''}`, hint:'source: carrier → PlanPicker' }); overlay.remove(); };
+
+        row.onclick = async () => {
+          const yr = $('year').value || '2025';
+          try {
+            const { json, url } = await loadPlanJSON(contract, pbp, yr);
+            PV_open({ __provenance: url, ...json }, { title: `${contract}${pbp?' - '+pbp:''}`, hint:`source: ${url}` });
+          } catch (e) {
+            console.warn('Full plan not found, falling back to county object', e);
+            PV_open(p, { title: `${contract}${pbp?' - '+pbp:''}`, hint:'source: carrier → PlanPicker (county JSON fallback)' });
+          }
+          overlay.remove();
+        };
+
         list.appendChild(row);
       });
+
       const close = document.createElement('button');
       close.textContent = 'Close'; close.className='pv-btn'; close.style.marginTop='8px';
       close.onclick = () => overlay.remove();
@@ -295,13 +330,13 @@
     function renderCountySummary(parent, county) {
       LAST_COUNTY = county;
       parent.innerHTML = '';
-      if (!county) return msg('County JSON empty.');
+      if (!county) return setMsg('County JSON empty.');
       const header = document.createElement('h3');
       header.textContent = `${county.county_name}, ${county.state} — ${(county.carriers?.length ?? 0)} carriers`;
       parent.appendChild(header);
 
       const carriers = county.carriers ?? [];
-      if (!carriers.length) { return msg('No carriers found in county JSON.'); }
+      if (!carriers.length) { return setMsg('No carriers found in county JSON.'); }
 
       carriers.forEach(c => {
         const row = document.createElement('div');
@@ -343,9 +378,25 @@
             const pbp = p.pbp || p.planId || p.plan_id || '';
             const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
             chip.textContent = `${contract}${pbp ? ' ' + pbp : ''}${premium!=null ? ` — $${Number(premium).toFixed(2)}/mo` : ''}`.trim();
-            chip.addEventListener('click', () => {
-              PV_open(p, { title: `${contract}${pbp ? ' - ' + pbp : ''}`, hint: 'source: county JSON' });
+
+            // Prefer full JSON; fallback to embedded object
+            const loader = async () => {
+              const yr = $('year').value || '2025';
+              try {
+                const { json, url } = await loadPlanJSON(contract, pbp, yr);
+                return { __provenance: url, ...json };
+              } catch (e) {
+                console.warn('Full plan JSON not found, using county object', contract, pbp, e);
+                return p;
+              }
+            };
+
+            // Your existing viewer integration
+            chip.addEventListener('click', async () => {
+              const data = await loader();
+              PV_open(data, { title: `${contract}${pbp ? ' - ' + pbp : ''}`, hint: data.__provenance ? `source: ${data.__provenance}` : 'source: county JSON' });
             });
+
             chips.appendChild(chip);
           });
           row.appendChild(chips);
@@ -364,13 +415,13 @@
       $('msg').textContent = ''; $('out').innerHTML = ''; $('dumpZone').innerHTML = '';
       const year = $('year').value;
       const zip = normalizeZip($('zip').value);
-      if (!/^\d{5}$/.test(zip)) return msg('Please enter a 5-digit ZIP.');
+      if (!/^\d{5}$/.test(zip)) return setMsg('Please enter a 5-digit ZIP.');
 
       try {
         const idx = await loadZipIndex(year);
         const rec = idx.find(e => e.zip === zip);
-        if (!rec) return msg(`ZIP ${zip} is not in the index. Try a nearby residential ZIP (not PO Box).`);
-        if (!(rec.counties?.length)) return msg(`ZIP ${zip} returned no counties.`);
+        if (!rec) return setMsg(`ZIP ${zip} is not in the index. Try a nearby residential ZIP (not PO Box).`);
+        if (!(rec.counties?.length)) return setMsg(`ZIP ${zip} returned no counties.`);
 
         const [fips] = rec.counties[0];
         const countyUrl = `${BASE}years/${year}/by-county/${fips}.json`;
@@ -386,17 +437,16 @@
         }
         info(`Loaded county ${fips}. Click a carrier or plan chip.`);
       } catch (e) {
-        console.error(e); msg('Error: ' + (e?.message || e));
+        console.error(e); setMsg('Error: ' + (e?.message || e));
       }
     }
 
-    // Dump all plan JSONs into the page for quick inspection
     function dumpAllPlans() {
       $('dumpZone').innerHTML = '';
-      if (!LAST_COUNTY) { return msg('Load a ZIP first, then click "Show all plan JSON".'); }
+      if (!LAST_COUNTY) { return setMsg('Load a ZIP first, then click "Show all plan JSON".'); }
       const carriers = LAST_COUNTY.carriers ?? [];
       const allPlans = carriers.flatMap(c => Array.isArray(c.plans) ? c.plans : []);
-      if (!allPlans.length) { return msg('This county JSON does not embed plan objects. No plan data to dump.'); }
+      if (!allPlans.length) { return setMsg('This county JSON does not embed plan objects. No plan data to dump.'); }
       const pre = document.createElement('pre'); pre.className='dump';
       pre.textContent = JSON.stringify(allPlans, null, 2);
       $('dumpZone').appendChild(pre);
@@ -410,4 +460,5 @@
   </script>
 </body>
 </html>
+
 
