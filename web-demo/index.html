@@ -19,32 +19,20 @@
     .badge { font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
     .muted { color: var(--muted); font-size: 13px; }
     .btn-secondary { border:1px solid var(--border); background:#fafafa; border-radius:8px; padding:6px 10px; font-size:13px; }
-
-    /* plan chip */
-    .plan-chip {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 3px 8px; margin: 4px 6px 0 0;
-      border: 1px solid var(--border); border-radius: 9999px;
-      background: var(--bg); font-size: 12px; cursor: pointer; user-select: none;
-    }
-    .plan-chip:hover { background: var(--bg-hover); }
+    .plan-chip { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; margin:4px 6px 0 0; border:1px solid var(--border); border-radius:9999px; background:var(--bg); font-size:12px; cursor:pointer; user-select:none; }
+    .plan-chip:hover { background:var(--bg-hover); }
     .carrier .name { cursor: pointer; }
 
-    /* ---- Drawer styles (mirrors plan-viewer.css so this file is self-sufficient) ---- */
-    #pv-drawer {
-      position: fixed; top: 0; right: 0; height: 100vh; width: min(720px, 95vw);
-      background: #fff; border-left: 1px solid #e5e7eb; box-shadow: -10px 0 25px rgba(0,0,0,0.08);
-      transform: translateX(100%); transition: transform 0.25s ease-in-out; z-index: 9999;
-      display: flex; flex-direction: column; font-family: inherit;
-    }
-    #pv-drawer.open { transform: translateX(0); }
+    /* Drawer shell (PlanViewer also has CSS, this just keeps page self-contained) */
+    #pv-drawer { position:fixed; top:0; right:0; height:100vh; width:min(720px,95vw); background:#fff; border-left:1px solid #e5e7eb; box-shadow:-10px 0 25px rgba(0,0,0,.08); transform:translateX(100%); transition:transform .25s ease-in-out; z-index:9999; display:flex; flex-direction:column; }
+    #pv-drawer.open { transform:translateX(0); }
     #pv-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #f3f4f6; }
     #pv-title { font-weight:600; font-size:16px; }
     #pv-actions { display:flex; gap:8px; }
     .pv-btn { border:1px solid #e5e7eb; background:#f9fafb; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
     .pv-btn:hover { background:#f3f4f6; }
     #pv-body { overflow:auto; padding:8px 16px 24px; height:100%; }
-    #pv-meta { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:6px 12px; margin:8px 0 12px; }
+    #pv-meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:6px 12px; margin:8px 0 12px; }
     .pv-kv { border:1px solid #f3f4f6; border-radius:8px; padding:8px; background:#fafafa; font-size:12px; }
     .pv-kv .k { color:#6b7280; display:block; margin-bottom:2px; }
     #pv-tabs { display:flex; border-bottom:1px solid #f3f4f6; margin:8px 0 12px; }
@@ -53,15 +41,15 @@
     #pv-content > .pv-panel { display:none; }
     #pv-content > .pv-panel.active { display:block; }
     .pv-tree { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; line-height:1.45; }
-    .pv-tree details { padding-left: 12px; margin-left: 12px; border-left: 1px dashed #e5e7eb; }
+    .pv-tree details { padding-left:12px; margin-left:12px; border-left:1px dashed #e5e7eb; }
     .pv-tree summary { cursor:pointer; list-style:none; }
     .pv-tree .pv-leaf { padding-left:28px; }
     .pv-muted { color:#6b7280; }
-    .pv-toast { position: fixed; bottom: 16px; right: 16px; background: #111827; color: white; padding: 8px 12px; border-radius: 8px; font-size: 12px; z-index: 10000; opacity: .98; }
-    pre.dump { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#fafafa; border:1px solid #eee; padding:10px; border-radius:8px; white-space:pre-wrap; }
+    .pv-toast { position:fixed; bottom:16px; right:16px; background:#111827; color:#fff; padding:8px 12px; border-radius:8px; font-size:12px; z-index:10000; opacity:.98; }
+    pre.dump { font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#fafafa; border:1px solid #eee; padding:10px; border-radius:8px; white-space:pre-wrap; }
   </style>
 
-  <!-- External assets assumed to be in web-demo/ alongside this file -->
+  <!-- Assets live alongside this file in web-demo/ -->
   <link rel="stylesheet" href="plan-viewer.css" />
   <script src="plan-viewer.js" defer></script>
   <script src="plan-picker.js" defer></script>
@@ -87,7 +75,7 @@
   <div id="out"></div>
   <div id="dumpZone"></div>
 
-  <!-- Drawer markup (PlanViewer.js will reuse this) -->
+  <!-- Drawer shell that PlanViewer.js will use -->
   <div id="pv-drawer" aria-hidden="true">
     <div id="pv-header">
       <div id="pv-title">Plan Details</div>
@@ -113,60 +101,52 @@
   </div>
 
   <script type="module">
-    // ---------- Utilities ----------
+    // ----------------- Small helpers -----------------
     const $ = (id) => document.getElementById(id);
     const setMsg = (t, color='#b00') => { const m = $('msg'); m.style.color=color; m.textContent = t; };
     const info = (t) => setMsg(t, '#555');
-
-    if (location.protocol === 'file:') {
-      info('⚠️ file:// detected. Use a local server (e.g., `npx serve`) so fetch() can load JSON.');
-    }
-
-    // Compute BASE. If path contains /web-demo/, strip from there up to file name.
-    const BASE = (() => {
-      const { origin, pathname } = location;
-      const m = pathname.match(/^(.*?)(\/web-demo\/.*)$/);
-      if (m) return origin + m[1] + '/';
-      return origin + pathname.replace(/[^/]*$/, ''); // current dir
-    })();
-    console.log('[BASE]', BASE);
-
-    const normalizeZip = (z) => String(z ?? '').replace(/\D/g, '').padStart(5, '0');
-    const fetchJson = async (url) => {
-      console.log('[fetch]', url);
-      const r = await fetch(url, { cache: 'no-store' });
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText} @ ${url}`);
-      return r.json();
-    };
-    const loadZipIndex = (year) => fetchJson(`${BASE}years/${year}/zip-index.json`);
-
-    // ---------- Drawer helpers (hook into your PlanViewer) ----------
-    // Buttons on the static drawer shell
-    (function wireDrawerButtons(){
-      const toast = (t)=>{ const d=document.createElement('div'); d.className='pv-toast'; d.textContent=t; document.body.appendChild(d); setTimeout(()=>d.remove(),2200); };
-      $('pv-close').onclick = ()=> document.getElementById('pv-drawer')?.classList.remove('open');
-      $('pv-copy').onclick = ()=> {
-        try {
-          const d = (window.PlanViewer && window.PlanViewer.__debug?.lastData) || null;
-          if (d) { navigator.clipboard.writeText(JSON.stringify(d, null, 2)); toast('Copied JSON'); }
-        } catch {}
-      };
-      $('pv-download').onclick = ()=> {
-        try {
-          const d = (window.PlanViewer && window.PlanViewer.__debug?.lastData) || null;
-          const meta = (window.PlanViewer && window.PlanViewer.__debug?.lastMeta) || null;
-          if (!d) return;
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type:'application/json' }));
-          a.download = (meta?.downloadName || 'plan') + '.json';
-          document.body.appendChild(a); a.click(); a.remove();
-        } catch {}
-      };
-    })();
-
-    // ---------- Full-plan loader (robust) ----------
     const pad3 = (v) => String(v ?? '').replace(/\D/g, '').padStart(3, '0');
 
+    // Detect BASE for Pages, plus fallbacks for CDN and raw
+    const PAGES_BASE = (() => {
+      const { origin, pathname } = location;
+      // If this page lives under /web-demo/, strip that segment back to repo root
+      const m = pathname.match(/^(.*?)(\/web-demo\/.*)$/);
+      if (m) return origin + m[1] + '/';
+      // Otherwise use the current folder; on Pages this is https://user.github.io/<repo>/
+      return origin + pathname.replace(/[^/]*$/, '');
+    })();
+
+    // Try to infer <user>/<repo> for fallbacks (works on *.github.io project pages)
+    const GH_USER = location.hostname.endsWith('github.io') ? location.hostname.split('.')[0] : null;
+    const GH_REPO = (location.pathname.split('/')[1] || '').trim();
+    const RAW_BASE = (GH_USER && GH_REPO) ? `https://raw.githubusercontent.com/${GH_USER}/${GH_REPO}/main/` : null;
+    const CDN_BASE = (GH_USER && GH_REPO) ? `https://cdn.jsdelivr.net/gh/${GH_USER}/${GH_REPO}@main/` : null;
+
+    console.log('[BASES]', { PAGES_BASE, CDN_BASE, RAW_BASE });
+
+    async function fetchJsonFromAny(relPath) {
+      const bases = [PAGES_BASE, CDN_BASE, RAW_BASE].filter(Boolean);
+      const errors = [];
+      for (const base of bases) {
+        const url = base + relPath;
+        try {
+          const r = await fetch(url, { cache: 'no-store' });
+          if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+          console.log('[fetch OK]', url);
+          return { json: await r.json(), url };
+        } catch (e) {
+          console.warn('[fetch fail]', url, e.message);
+          errors.push(`${url} → ${e.message}`);
+        }
+      }
+      throw new Error(`All sources failed for ${relPath}:\n- ${errors.join('\n- ')}`);
+    }
+
+    const normalizeZip = (z) => String(z ?? '').replace(/\D/g, '').padStart(5, '0');
+    const loadZipIndex = (year) => fetchJsonFromAny(`years/${year}/zip-index.json`).then(r => r.json);
+
+    // ---------- Full plan loader (tries many filenames + all bases) ----------
     function extractIds(plan) {
       const year = $('year')?.value || '2025';
       const contract = (plan.contract || plan.contractId || plan.contract_id || plan.ContractID || '').toString().toUpperCase().trim();
@@ -176,30 +156,30 @@
       return { year, contract, pbp, segment, cmsKey };
     }
 
-    function planPaths(base, { year, contract, pbp, segment, cmsKey }) {
+    function relPlanPaths({ year, contract, pbp, segment, cmsKey }) {
       const y = year, c = contract, p = pbp, s = segment || '000';
       return [
-        // With segment (most complete)
-        `${base}years/${y}/by-plan/${c}-${p}-${s}.json`,
-        `${base}years/${y}/plan-details/${c}-${p}-${s}.json`,
-        `${base}years/${y}/plans/${c}-${p}-${s}.json`,
-        `${base}years/${y}/by-plan/${c}/${p}-${s}.json`,
-        `${base}years/${y}/by-plan/${c}/${p}/${s}.json`,
-        `${base}years/${y}/plans/${c}/${p}-${s}.json`,
-        `${base}years/${y}/plans/${c}/${p}/${s}.json`,
-        // CMS Plan Key
-        `${base}years/${y}/by-plan/${cmsKey}.json`,
-        `${base}years/${y}/plan-details/${cmsKey}.json`,
-        `${base}years/${y}/plans/${cmsKey}.json`,
+        // With segment
+        `years/${y}/by-plan/${c}-${p}-${s}.json`,
+        `years/${y}/plan-details/${c}-${p}-${s}.json`,
+        `years/${y}/plans/${c}-${p}-${s}.json`,
+        `years/${y}/by-plan/${c}/${p}-${s}.json`,
+        `years/${y}/by-plan/${c}/${p}/${s}.json`,
+        `years/${y}/plans/${c}/${p}-${s}.json`,
+        `years/${y}/plans/${c}/${p}/${s}.json`,
+        // CMS key
+        `years/${y}/by-plan/${cmsKey}.json`,
+        `years/${y}/plan-details/${cmsKey}.json`,
+        `years/${y}/plans/${cmsKey}.json`,
         // Without segment
-        `${base}years/${y}/by-plan/${c}-${p}.json`,
-        `${base}years/${y}/plan-details/${c}-${p}.json`,
-        `${base}years/${y}/plans/${c}-${p}.json`,
-        `${base}years/${y}/by-plan/${c}/${p}.json`,
-        `${base}years/${y}/plans/${c}/${p}.json`,
-        // Minified variants sometimes exist
-        `${base}years/${y}/by-plan/${c}-${p}-${s}.min.json`,
-        `${base}years/${y}/by-plan/${c}-${p}.min.json`,
+        `years/${y}/by-plan/${c}-${p}.json`,
+        `years/${y}/plan-details/${c}-${p}.json`,
+        `years/${y}/plans/${c}-${p}.json`,
+        `years/${y}/by-plan/${c}/${p}.json`,
+        `years/${y}/plans/${c}/${p}.json`,
+        // Minified variants (some repos)
+        `years/${y}/by-plan/${c}-${p}-${s}.min.json`,
+        `years/${y}/by-plan/${c}-${p}.min.json`,
       ];
     }
 
@@ -208,33 +188,29 @@
         ? planOrIds
         : extractIds(planOrIds);
 
-      const urls = planPaths(BASE, ids);
       const errors = [];
-      for (const u of urls) {
+      for (const rel of relPlanPaths(ids)) {
         try {
-          const res = await fetch(u, { cache: 'no-store' });
-          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-          return { json: await res.json(), url: u };
-        } catch (e) {
-          errors.push(`${u} → ${e.message}`);
-        }
+          const { json, url } = await fetchJsonFromAny(rel);
+          return { json, url };
+        } catch (e) { errors.push(e.message); }
       }
-      throw new Error(`No plan JSON found.\nTried:\n- ${errors.join('\n- ')}`);
+      throw new Error(`No plan JSON found for ${ids.contract}-${ids.pbp}. Last errors:\n- ${errors.slice(-5).join('\n- ')}`);
     }
 
-    // Expose to PlanPicker.js (so carrier-name modal also pulls full files)
+    // Expose to external plan-picker.js
     window.__loadPlanJSON = async (contract, pbp, year, segment='000', cmsKey=null) => {
       const ids = {
         contract: (contract||'').toString().toUpperCase().trim(),
         pbp: pad3(pbp),
         year: year || $('year')?.value || '2025',
-        segment: pad3(segment||'000'),
+        segment: pad3(segment || '000'),
         cmsKey: cmsKey || `${year || $('year')?.value || '2025'}-${(contract||'').toString().toUpperCase().trim()}-${pad3(pbp)}-${pad3(segment||'000')}`
       };
       return loadFullPlan(ids);
     };
 
-    // ---------- Render ----------
+    // ---------- Rendering ----------
     let LAST_COUNTY = null;
 
     function renderCountySummary(parent, county) {
@@ -264,14 +240,6 @@
           const plans = Array.isArray(c.plans) ? c.plans : [];
           if (window.PlanPicker?.open) {
             PlanPicker.open(plans, { title: `${c.orgName || 'Carrier'} — choose a plan` });
-          } else {
-            // Minimal fallback: open the first plan
-            if (plans[0]) {
-              const { contract, pbp } = extractIds(plans[0]);
-              loadFullPlan(plans[0]).then(({json,url})=>{
-                window.PlanViewer?.show?.({ __provenance:url, ...json }, { title:`${contract} - ${pbp}`, hint:`source: ${url}` });
-              }).catch(()=> window.PlanViewer?.show?.(plans[0], { title:`${contract} - ${pbp}`, hint:'source: county JSON (fallback)' }));
-            }
           }
         });
         name.addEventListener('keydown', (e) => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); name.click(); } });
@@ -303,28 +271,17 @@
             const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
             chip.textContent = `${ids.contract} ${ids.pbp}${premium!=null ? ` — $${Number(premium).toFixed(2)}/mo` : ''}`;
 
-            // When available, prefer full file; fallback to embedded county object.
-            const loader = async () => {
+            // Prefer full file; fallback to embedded county object
+            chip.addEventListener('click', async () => {
               try {
                 const { json, url } = await loadFullPlan(p);
-                return { __provenance: url, ...json };
+                PlanViewer.show({ __provenance: url, ...json }, { title: `${ids.contract} - ${ids.pbp}`, hint:`source: ${url}` });
               } catch (e) {
-                console.warn('Full plan JSON not found; using county object', ids.contract, ids.pbp, e);
-                return { __provenance: 'county JSON (fallback)', ...p };
+                console.warn('Full plan JSON not found; showing county object', e);
+                PlanViewer.show(p, { title: `${ids.contract} - ${ids.pbp}`, hint:'source: county JSON (fallback)' });
               }
-            };
+            });
 
-            if (window.PlanViewer?.register) {
-              PlanViewer.register(chip, loader, {
-                title: `${ids.contract} - ${ids.pbp}`,
-                hint: 'Prefers full plan file; falls back to county JSON'
-              });
-            } else {
-              chip.addEventListener('click', async () => {
-                const data = await loader();
-                window.PlanViewer?.show?.(data, { title: `${ids.contract} - ${ids.pbp}`, hint: data.__provenance });
-              });
-            }
             chips.appendChild(chip);
           });
           row.appendChild(chips);
@@ -352,8 +309,7 @@
         if (!(rec.counties?.length)) return setMsg(`ZIP ${zip} returned no counties.`);
 
         const [fips] = rec.counties[0];
-        const countyUrl = `${BASE}years/${year}/by-county/${fips}.json`;
-        const county = await fetchJson(countyUrl);
+        const { json: county } = await fetchJsonFromAny(`years/${year}/by-county/${fips}.json`);
         renderCountySummary($('out'), county);
 
         if (rec.counties.length > 1) {
@@ -381,11 +337,9 @@
       info(`Dumped ${allPlans.length} plan objects below.`);
     }
 
-    // ---------- Boot ----------
+    // Wire up
     window.addEventListener('DOMContentLoaded', () => {
-      // Initialize your viewer if present
-      if (typeof window.PlanViewer?.init === 'function') { try { window.PlanViewer.init(); } catch {} }
-
+      if (typeof PlanViewer?.init === 'function') { try { PlanViewer.init(); } catch {} }
       $('go').addEventListener('click', lookup);
       $('zip').addEventListener('keydown', (e) => { if (e.key === 'Enter') lookup(); });
       $('dump').addEventListener('click', dumpAllPlans);
@@ -393,4 +347,3 @@
   </script>
 </body>
 </html>
-
