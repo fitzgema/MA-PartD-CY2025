@@ -32,7 +32,7 @@
       display: inline-flex; align-items: center; gap: 6px;
       padding: 3px 8px; margin: 4px 6px 0 0;
       border: 1px solid var(--border); border-radius: 9999px;
-      background: #f9fafb; font-size: 12px; cursor: pointer;
+      background: var(--bg); font-size: 12px; cursor: pointer;
       user-select: none;
     }
     .plan-chip:hover { background: var(--bg-hover); }
@@ -51,7 +51,7 @@
     #pv-actions { display:flex; gap:8px; }
     .pv-btn { border:1px solid #e5e7eb; background:#f9fafb; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
     .pv-btn:hover { background:#f3f4f6; }
-    #pv-body { overflow:auto; padding:8px 16px 24px; height:100%; }
+    #pv-body { overflow: auto; padding: 8px 16px 24px; height: 100%; }
     #pv-meta { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:6px 12px; margin:8px 0 12px; }
     .pv-kv { border:1px solid #f3f4f6; border-radius:8px; padding:8px; background:#fafafa; font-size:12px; }
     .pv-kv .k { color:#6b7280; display:block; margin-bottom:2px; }
@@ -90,7 +90,7 @@
   <div id="out"></div>
   <div id="dumpZone"></div>
 
-  <!-- Inlined Plan Viewer UI -->
+  <!-- Inlined Plan Viewer UI (PlanViewer.js will no-op init if this exists) -->
   <div id="pv-drawer" aria-hidden="true">
     <div id="pv-header">
       <div id="pv-title">Plan Details</div>
@@ -116,15 +116,16 @@
   </div>
 
   <script type="module">
-    // ---------- Helpers ----------
+    // ---------- Basics ----------
     const $ = (id) => document.getElementById(id);
     const setMsg = (t, color='#b00') => { const m = $('msg'); m.style.color=color; m.textContent = t; };
     const info = (t) => setMsg(t, '#555');
 
     if (location.protocol === 'file:') {
-      info('⚠️ You are viewing via file://. fetch() to JSON will fail. Use a local web server (e.g., `npx serve`).');
+      info('⚠️ file:// detected. Use a local server (e.g., `npx serve`) so fetch() can load JSON.');
     }
 
+    // Compute BASE so it works on GitHub Pages subfolders or locally
     const BASE = (() => {
       const { origin, pathname } = location;
       const m = pathname.match(/^(.*?)(\/web-demo\/.*)$/);
@@ -142,7 +143,7 @@
     };
     const loadZipIndex = (year) => fetchJson(`${BASE}years/${year}/zip-index.json`);
 
-    // ---------- PlanViewer (your inlined implementation) ----------
+    // ---------- Drawer helpers ----------
     const PV_state = { data:null, meta:null, activeTab:0 };
     function PV_el(tag, attrs = {}, children = []) {
       const n = document.createElement(tag);
@@ -255,16 +256,51 @@
     });
     function toast(t){ const d=document.createElement('div'); d.className='pv-toast'; d.textContent=t; document.body.appendChild(d); setTimeout(()=>d.remove(),2200); }
 
-    // ---------- Full plan JSON loader (NEW) ----------
-    async function loadPlanJSON(contract, pbp, year) {
-      const candidates = [
-        `${BASE}years/${year}/by-plan/${contract}-${pbp}.json`,
-        `${BASE}years/${year}/plans/${contract}-${pbp}.json`,
-        `${BASE}years/${year}/plans/${contract}/${pbp}.json`,
-        `${BASE}years/${year}/plan-details/${contract}-${pbp}.json`,
+    // ---------- Robust full-plan loader ----------
+    const pad3 = (v) => String(v ?? '').replace(/\D/g, '').padStart(3, '0');
+
+    function extractIds(plan, yearSel) {
+      const year = yearSel?.value || '2025';
+      const contract = (plan.contract || plan.contractId || plan.contract_id || plan.ContractID || '').toString().toUpperCase().trim();
+      const pbp = pad3(plan.pbp ?? plan.planId ?? plan.plan_id ?? plan.PBP ?? '');
+      const segment = pad3(plan.segmentId ?? plan.segment_id ?? plan.segment ?? '000');
+      const cmsKey = plan.cmsPlanKey || plan.CMSPlanKey || `${year}-${contract}-${pbp}-${segment}`;
+      return { year, contract, pbp, segment, cmsKey };
+    }
+
+    function planPaths(base, { year, contract, pbp, segment, cmsKey }) {
+      const y = year; const c = contract; const p = pbp; const s = segment || '000';
+      return [
+        // With segment (most likely to exist)
+        `${base}years/${y}/by-plan/${c}-${p}-${s}.json`,
+        `${base}years/${y}/plan-details/${c}-${p}-${s}.json`,
+        `${base}years/${y}/plans/${c}-${p}-${s}.json`,
+        `${base}years/${y}/by-plan/${c}/${p}-${s}.json`,
+        `${base}years/${y}/by-plan/${c}/${p}/${s}.json`,
+        `${base}years/${y}/plans/${c}/${p}-${s}.json`,
+        `${base}years/${y}/plans/${c}/${p}/${s}.json`,
+
+        // CMS Plan Key variants
+        `${base}years/${y}/by-plan/${cmsKey}.json`,
+        `${base}years/${y}/plan-details/${cmsKey}.json`,
+        `${base}years/${y}/plans/${cmsKey}.json`,
+
+        // Without segment
+        `${base}years/${y}/by-plan/${c}-${p}.json`,
+        `${base}years/${y}/plan-details/${c}-${p}.json`,
+        `${base}years/${y}/plans/${c}-${p}.json`,
+        `${base}years/${y}/by-plan/${c}/${p}.json`,
+        `${base}years/${y}/plans/${c}/${p}.json`,
+
+        // .min.json variants
+        `${base}years/${y}/by-plan/${c}-${p}-${s}.min.json`,
+        `${base}years/${y}/by-plan/${c}-${p}.min.json`,
       ];
+    }
+
+    async function tryPaths(urls) {
       const errors = [];
-      for (const u of candidates) {
+      for (const u of urls) {
         try {
           const res = await fetch(u, { cache: 'no-store' });
           if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -273,10 +309,28 @@
       }
       throw new Error(`No plan JSON found.\nTried:\n- ${errors.join('\n- ')}`);
     }
-    // Expose for external plan-picker.js if you decide to use it
-    window.__loadPlanJSON = loadPlanJSON;
 
-    // ---------- PlanPicker (inlined, upgraded to use full JSON) ----------
+    async function loadFullPlan(planOrIds) {
+      const ids = ('contract' in planOrIds && 'pbp' in planOrIds && 'year' in planOrIds)
+        ? planOrIds
+        : extractIds(planOrIds, $('year'));
+      const urls = planPaths(BASE, ids);
+      return tryPaths(urls);
+    }
+
+    // Expose for external plan-picker.js if you use it later
+    window.__loadPlanJSON = async (contract, pbp, year, segment='000', cmsKey=null) => {
+      const ids = {
+        contract: (contract||'').toString().toUpperCase().trim(),
+        pbp: pad3(pbp),
+        year: year||'2025',
+        segment: pad3(segment||'000'),
+        cmsKey: cmsKey || `${year||'2025'}-${(contract||'').toString().toUpperCase().trim()}-${pad3(pbp)}-${pad3(segment||'000')}`
+      };
+      return loadFullPlan(ids);
+    };
+
+    // ---------- PlanPicker (modal) ----------
     function openPlanPicker(plans = [], { title = 'Select a plan' } = {}) {
       if (!Array.isArray(plans) || !plans.length) { toast('No plans for this carrier.'); return; }
       const overlay = document.createElement('div');
@@ -289,8 +343,7 @@
       const list = document.createElement('div');
 
       plans.forEach(p => {
-        const contract = p.contract || p.contractId || p.contract_id || '';
-        const pbp = p.pbp || p.planId || p.plan_id || '';
+        const ids = extractIds(p, $('year'));
         const name = p.planName || p.name || '';
         const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
 
@@ -300,16 +353,15 @@
           border:'1px solid #e5e7eb', borderRadius:'10px', background:'#fafafa', cursor:'pointer' });
         row.onmouseenter = () => row.style.background = '#f3f4f6';
         row.onmouseleave = () => row.style.background = '#fafafa';
-        row.textContent = `${contract}${pbp?'-'+pbp:''}  ${name}${premium!=null?` — $${Number(premium).toFixed(2)}/mo`:''}`;
+        row.textContent = `${ids.contract}-${ids.pbp}-${ids.segment}  ${name}${premium!=null?` — $${Number(premium).toFixed(2)}/mo`:''}`;
 
         row.onclick = async () => {
-          const yr = $('year').value || '2025';
           try {
-            const { json, url } = await loadPlanJSON(contract, pbp, yr);
-            PV_open({ __provenance: url, ...json }, { title: `${contract}${pbp?' - '+pbp:''}`, hint:`source: ${url}` });
+            const { json, url } = await loadFullPlan(p);
+            PV_open({ __provenance: url, ...json }, { title: `${ids.contract} - ${ids.pbp}`, hint:`source: ${url}` });
           } catch (e) {
             console.warn('Full plan not found, falling back to county object', e);
-            PV_open(p, { title: `${contract}${pbp?' - '+pbp:''}`, hint:'source: carrier → PlanPicker (county JSON fallback)' });
+            PV_open(p, { title: `${ids.contract} - ${ids.pbp}`, hint:'source: carrier → PlanPicker (county JSON fallback)' });
           }
           overlay.remove();
         };
@@ -324,13 +376,14 @@
       overlay.appendChild(modal); document.body.appendChild(overlay);
     }
 
-    // ---------- Rendering ----------
+    // ---------- Render ----------
     let LAST_COUNTY = null;
 
     function renderCountySummary(parent, county) {
       LAST_COUNTY = county;
       parent.innerHTML = '';
       if (!county) return setMsg('County JSON empty.');
+
       const header = document.createElement('h3');
       header.textContent = `${county.county_name}, ${county.state} — ${(county.carriers?.length ?? 0)} carriers`;
       parent.appendChild(header);
@@ -371,30 +424,22 @@
         if (n) {
           const chips = document.createElement('div');
           plansArray.forEach(p => {
+            const ids = extractIds(p, $('year'));
+            const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
+
             const chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'plan-chip';
-            const contract = p.contract || p.contractId || p.contract_id || '';
-            const pbp = p.pbp || p.planId || p.plan_id || '';
-            const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
-            chip.textContent = `${contract}${pbp ? ' ' + pbp : ''}${premium!=null ? ` — $${Number(premium).toFixed(2)}/mo` : ''}`.trim();
+            chip.textContent = `${ids.contract} ${ids.pbp}${premium!=null ? ` — $${Number(premium).toFixed(2)}/mo` : ''}`;
 
-            // Prefer full JSON; fallback to embedded object
-            const loader = async () => {
-              const yr = $('year').value || '2025';
-              try {
-                const { json, url } = await loadPlanJSON(contract, pbp, yr);
-                return { __provenance: url, ...json };
-              } catch (e) {
-                console.warn('Full plan JSON not found, using county object', contract, pbp, e);
-                return p;
-              }
-            };
-
-            // Your existing viewer integration
             chip.addEventListener('click', async () => {
-              const data = await loader();
-              PV_open(data, { title: `${contract}${pbp ? ' - ' + pbp : ''}`, hint: data.__provenance ? `source: ${data.__provenance}` : 'source: county JSON' });
+              try {
+                const { json, url } = await loadFullPlan(p);
+                PV_open({ __provenance: url, ...json }, { title: `${ids.contract} - ${ids.pbp}`, hint:`source: ${url}` });
+              } catch (e) {
+                console.warn('Full plan JSON not found; showing county object', e);
+                PV_open(p, { title: `${ids.contract} - ${ids.pbp}`, hint: 'source: county JSON (fallback)' });
+              }
             });
 
             chips.appendChild(chip);
@@ -460,5 +505,3 @@
   </script>
 </body>
 </html>
-
-
