@@ -4,15 +4,12 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "index.html"
-      - "plan-viewer.css"
-      - "plan-viewer.js"
-      - "plan-picker.js"
+      - "web-demo/**"
       - "years/**"
       - ".github/workflows/build-ma-dataset.yml"
   workflow_dispatch: {}
 
-# Ensure only the newest run deploys; older runs are canceled automatically
+# Only keep the newest deployment run
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -29,15 +26,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Helpful logs so you can verify where files are
+      - name: Show tree
+        shell: bash
+        run: |
+          echo "pwd=$(pwd)"
+          ls -la
+          echo "--- web-demo ---"
+          ls -la web-demo || true
+          echo "--- years ---"
+          ls -la years || true
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      # Build step (static copy). Adjust includes as needed.
-      - name: Build static site
+      - name: Build static site (copy web-demo → dist, add years if outside)
+        shell: bash
         run: |
+          set -eux
           rm -rf dist
           mkdir -p dist
-          cp -a index.html plan-viewer.css plan-viewer.js plan-picker.js years dist/
+          # Copy everything from the site folder
+          cp -a web-demo/. dist/
+          # If the dataset is at repo root, include it (no-op if already under web-demo)
+          if [ -d years ] && [ ! -d dist/years ]; then
+            cp -a years dist/
+          fi
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
