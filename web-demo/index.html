@@ -37,7 +37,7 @@
     .carrier .name { cursor: pointer; }
   </style>
 
-  <!-- Optional (your implementations) -->
+  <!-- Viewer + Picker -->
   <link rel="stylesheet" href="plan-viewer.css" />
   <script src="plan-viewer.js" defer></script>
   <script src="plan-picker.js" defer></script>
@@ -62,38 +62,45 @@
   <div id="out"></div>
 
   <script type="module">
-    // Safe guards if external scripts aren't present
+    // --- Diagnostics banner helper ---
+    const $ = (id) => document.getElementById(id);
+    function errorMsg(msg) { const m = $('msg'); m.style.color = '#b00'; m.textContent = String(msg || 'Unknown error'); }
+    function infoMsg(msg)  { const m = $('msg'); m.style.color = '#555'; m.textContent = String(msg); }
+
+    // Use the actual globals if loaded, else fallbacks that scream loudly
     const PlanViewer = (globalThis.PlanViewer ?? {
-      init(){}, register(node, plan){ node.addEventListener('click', () => alert('PlanViewer not loaded.\n\n' + JSON.stringify(plan, null, 2))); }
+      __fallback: true,
+      init(){ console.warn('PlanViewer fallback in use (not loaded).'); },
+      register(node, plan){ node.addEventListener('click', () => alert('PlanViewer not loaded.\n\n' + JSON.stringify(plan, null, 2))); },
+      show(plan){ alert('PlanViewer not loaded.\n\n' + JSON.stringify(plan, null, 2)); }
     });
     const PlanPicker = (globalThis.PlanPicker ?? {
-      open(plans, opts){ alert((opts?.title || 'Choose a plan') + '\n\n' + plans.map(p => (p.contract || p.contractId) + ' ' + (p.pbp || p.planId)).join('\n')); }
+      __fallback: true,
+      open(plans, opts){ alert('PlanPicker not loaded.\n\n' + (opts?.title||'') + '\n' + plans.length + ' plan(s)'); }
     });
 
-    // Compute BASE so it works on GitHub Pages (subfolder) or locally
+    // Compute BASE so it works on GH Pages subfolders or local dev
     const BASE = (() => {
-      const { origin, pathname } = location;
-      // If this page is /web-demo/..., strip from /web-demo/ onward; else use folder of current file.
+      const { origin, pathname, protocol } = location;
+      if (protocol === 'file:') {
+        console.warn('Serving from file:// — fetch() will fail. Use a local web server.');
+        infoMsg('Tip: run a local web server (e.g., `npx serve`) — fetch() fails on file://');
+      }
       const m = pathname.match(/^(.*?)(\/web-demo\/.*)$/);
       if (m) return origin + m[1] + '/';
       return origin + pathname.replace(/[^/]*$/, ''); // current dir
     })();
-
-    const $ = (id) => document.getElementById(id);
-    const $msg = () => $('msg');
-    const $out = () => $('out');
+    console.log('[BASE]', BASE);
 
     const normalizeZip = (z) => String(z ?? '').replace(/\D/g, '').padStart(5, '0');
 
     async function fetchJson(url) {
+      console.log('[fetch]', url);
       const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText} @ ${url}`);
       return res.json();
     }
-
-    async function loadZipIndex(year) {
-      return fetchJson(`${BASE}years/${year}/zip-index.json`);
-    }
+    const loadZipIndex = (year) => fetchJson(`${BASE}years/${year}/zip-index.json`);
 
     async function tryFetch(url) {
       const res = await fetch(url, { cache: 'no-store' });
@@ -101,7 +108,6 @@
       return { json: await res.json(), url };
     }
 
-    // Optional helper if you want to deep-load a plan JSON by contract/PBP
     async function loadPlanJSON(contract, pbp, year) {
       const candidates = [
         `${BASE}years/${year}/by-plan/${contract}-${pbp}.json`,
@@ -117,15 +123,24 @@
     }
 
     function renderCountySummary(parent, county) {
+      if (!county) { errorMsg('County JSON empty.'); return; }
+      console.log('[county]', county);
+      parent.innerHTML = '';
+
       const header = document.createElement('h3');
       header.textContent = `${county.county_name}, ${county.state} — ${(county.carriers?.length ?? 0)} carriers`;
       parent.appendChild(header);
 
-      (county.carriers ?? []).forEach(c => {
+      const carriers = county.carriers ?? [];
+      if (!Array.isArray(carriers) || carriers.length === 0) {
+        errorMsg('No carriers found in county JSON.');
+        return;
+      }
+
+      carriers.forEach(c => {
         const row = document.createElement('div');
         row.className = 'carrier';
 
-        // Top line
         const top = document.createElement('div');
 
         const name = document.createElement('strong');
@@ -135,6 +150,7 @@
         name.tabIndex = 0;
         name.addEventListener('click', () => {
           const plans = Array.isArray(c.plans) ? c.plans : [];
+          console.log('[PlanPicker.open] plans:', plans.length, plans);
           PlanPicker.open(plans, { title: `${c.orgName || 'Carrier'} — choose a plan` });
         });
         name.addEventListener('keydown', (e) => {
@@ -148,7 +164,8 @@
 
         const count = document.createElement('span');
         count.className = 'muted';
-        const n = (c.plans ?? []).length;
+        const plansArray = (c.plans ?? []);
+        const n = plansArray.length;
         count.textContent = ` — ${n} plan${n === 1 ? '' : 's'}`;
 
         top.appendChild(name);
@@ -156,18 +173,21 @@
         top.appendChild(count);
         row.appendChild(top);
 
-        // Plan chips
-        if (Array.isArray(c.plans) && c.plans.length) {
+        if (n) {
           const chips = document.createElement('div');
-          c.plans.forEach(p => {
+          plansArray.forEach(p => {
             const chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'plan-chip';
+
             const contract = p.contract || p.contractId || p.contract_id || '';
             const pbp = p.pbp || p.planId || p.plan_id || '';
-            chip.textContent = `${contract}${pbp ? ' ' + pbp : ''}`.trim();
+            const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
+            chip.textContent = `${contract}${pbp ? ' ' + pbp : ''}${premium!=null ? ` — $${Number(premium).toFixed(2)}/mo` : ''}`.trim();
+            chip.setAttribute('aria-label', `Open details for ${contract} ${pbp}`);
 
-            // Register with your viewer (opens a drawer/modal, etc.)
+            chip.addEventListener('click', () => console.log('[chip click]', { contract, pbp, premium }));
+
             PlanViewer.register(chip, p, {
               title: `${contract}${pbp ? ' - ' + pbp : ''}`,
               hint: 'source: county JSON'
@@ -176,6 +196,11 @@
             chips.appendChild(chip);
           });
           row.appendChild(chips);
+        } else {
+          const none = document.createElement('div');
+          none.className = 'muted';
+          none.textContent = 'No plans listed for this carrier.';
+          row.appendChild(none);
         }
 
         parent.appendChild(row);
@@ -183,41 +208,31 @@
     }
 
     async function lookup() {
-      const msg = $msg();
-      const out = $out();
+      const msg = $('msg');
+      const out = $('out');
       msg.textContent = '';
       out.innerHTML = '';
 
       const year = $('year').value;
       const zip = normalizeZip($('zip').value);
 
-      if (!/^\d{5}$/.test(zip)) {
-        msg.textContent = 'Please enter a 5-digit ZIP.';
-        return;
-      }
+      if (!/^\d{5}$/.test(zip)) return errorMsg('Please enter a 5-digit ZIP.');
 
       try {
-        // 1) ZIP → candidate counties
-        const idx = await loadZipIndex(year);
-        const rec = idx.find(e => e.zip === zip);
-        if (!rec) {
-          msg.textContent = `ZIP ${zip} is not in the index. Try a nearby residential ZIP (not PO Box).`;
-          return;
-        }
-        if (!(rec.counties?.length)) {
-          msg.textContent = `ZIP ${zip} returned no counties.`;
-          return;
-        }
+        if (!globalThis.PlanViewer) console.warn('globalThis.PlanViewer missing (using fallback).');
+        if (!globalThis.PlanPicker) console.warn('globalThis.PlanPicker missing (using fallback).');
 
-        // 2) Choose top county by share
+        const idx = await loadZipIndex(year);
+        console.log('[zip-index entries]', idx?.length);
+        const rec = idx.find(e => e.zip === zip);
+        if (!rec) return errorMsg(`ZIP ${zip} is not in the index. Try a nearby residential ZIP (not PO Box).`);
+        if (!(rec.counties?.length)) return errorMsg(`ZIP ${zip} returned no counties.`);
+
         const [fips] = rec.counties[0];
         const countyUrl = `${BASE}years/${year}/by-county/${fips}.json`;
-
-        // 3) Fetch + 4) Render
         const county = await fetchJson(countyUrl);
         renderCountySummary(out, county);
 
-        // 5) Note if multiple counties
         if (rec.counties.length > 1) {
           const hint = document.createElement('div');
           hint.className = 'muted';
@@ -225,22 +240,35 @@
           hint.textContent = `Note: ZIP ${zip} spans multiple counties; showing top match FIPS ${fips}. Others: ${other || '—'}.`;
           out.appendChild(hint);
         }
+
+        infoMsg(`Loaded county ${fips}. Click a carrier or plan chip.`);
       } catch (err) {
-        msg.textContent = 'Error: ' + (err?.message || err);
+        console.error(err);
+        errorMsg('Error: ' + (err?.message || err));
       }
     }
 
     function init() {
-      // If your PlanViewer exposes init, call it
       if (typeof PlanViewer.init === 'function') {
-        try { PlanViewer.init(); } catch {}
+        try { PlanViewer.init(); } catch (e) { console.warn('PlanViewer.init() error', e); }
       }
 
       $('go').addEventListener('click', lookup);
       $('zip').addEventListener('keydown', (e) => { if (e.key === 'Enter') lookup(); });
+
+      document.addEventListener('click', (e) => {
+        if (e.target && e.target.closest('.plan-chip')) {
+          console.log('[bubble] .plan-chip click bubbled.');
+        }
+      });
+
+      console.log('[PlanViewer present?]', !!globalThis.PlanViewer, 'fallback?', !!PlanViewer.__fallback);
+      console.log('[PlanPicker present?]', !!globalThis.PlanPicker, 'fallback?', !!PlanPicker.__fallback);
     }
 
     window.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
+</html>
+
 </html>
