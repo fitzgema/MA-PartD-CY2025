@@ -5,360 +5,491 @@
   <title>Medicare Advantage Carrier Lookup (Static JSON)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root { --border:#e5e7eb; --muted:#666; --bg:#f9fafb; --bg-hover:#f3f4f6; --danger:#b00; --ok:#157347; --pad:24px; }
-    * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: var(--pad); }
-    h1 { margin: 0 0 16px; font-size: 22px; }
-    label { margin-right: 12px; display: inline-flex; gap: 8px; align-items: center; }
-    input, select, button, textarea { font-size: 16px; padding: 6px 10px; }
-    button { cursor: pointer; }
-    #msg { margin: 16px 0; color: var(--danger); white-space: pre-wrap; }
-    #out { margin-top: 12px; }
-    .row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    .carrier { padding: 8px 0; border-bottom: 1px solid #eee; }
-    .badge { font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
-    .muted { color: var(--muted); font-size: 13px; }
-    .btn-secondary { border:1px solid var(--border); background:#fafafa; border-radius:8px; padding:6px 10px; font-size:13px; }
-    .plan-chip { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; margin:4px 6px 0 0; border:1px solid var(--border); border-radius:9999px; background:var(--bg); font-size:12px; cursor:pointer; user-select:none; }
-    .plan-chip:hover { background:var(--bg-hover); }
-    .carrier .name { cursor: pointer; }
-
-    /* Data source panel */
-    details#ds { margin-top: 10px; }
-    #bases { width: min(880px, 96vw); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    #basesInfo { margin-top: 6px; font-size: 12px; color: #555; white-space: pre-wrap; }
+    :root {
+      --bg:#0b1220; --panel:#0f172a; --ink:#e5e7eb; --muted:#94a3b8; --accent:#60a5fa;
+      --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --border:#1e293b;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#0b1220,#0a0f1a);color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    header{position:sticky;top:0;z-index:10;background:rgba(10,15,26,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+    .wrap{max-width:1100px;margin:0 auto;padding:20px}
+    .topbar{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    .brand{display:flex;gap:12px;align-items:center}
+    .dot{width:12px;height:12px;border-radius:12px;background:linear-gradient(135deg,#34d399,#60a5fa)}
+    h1{font-size:18px;margin:0;font-weight:600}
+    nav{display:flex;gap:8px;flex-wrap:wrap}
+    .tab{border:1px solid var(--border);background:#0f172a;padding:10px 12px;border-radius:10px;cursor:pointer}
+    .tab[aria-selected="true"]{border-color:#2b3b55; background:#111b2e; outline:2px solid #1d4ed8}
+    main{padding:20px}
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .grow{flex:1 1 auto}
+    input,select{background:#0b1426;color:var(--ink);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;font-size:14px}
+    th{font-weight:600;color:var(--muted)}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--border);background:#0b1426;font-size:12px;color:var(--muted)}
+    .stat{display:grid;grid-template-columns:auto auto;gap:6px 12px}
+    .stat b{color:var(--ink)}
+    .hint{color:var(--muted);font-size:13px}
+    .empty{padding:24px;border:1px dashed var(--border);border-radius:12px;text-align:center;color:var(--muted)}
+    .badge-ok{color:var(--ok)} .badge-warn{color:var(--warn)} .badge-bad{color:var(--bad)}
+    footer{color:var(--muted);font-size:12px;margin-top:16px}
+    .hidden{display:none !important}
+    @media (max-width:700px){ .topbar{flex-direction:column;align-items:flex-start} nav{width:100%} }
   </style>
-
-  <!-- Assets live alongside this file in web-demo/ -->
-  <link rel="stylesheet" href="plan-viewer.css" />
-  <script src="plan-viewer.js" defer></script>
-  <script src="plan-picker.js" defer></script>
 </head>
-
 <body>
-  <h1>Medicare Advantage Carrier Lookup (Static JSON)</h1>
-
-  <div role="form" aria-label="Lookup" class="row">
-    <label for="zip">ZIP
-      <input id="zip" placeholder="e.g., 55379" inputmode="numeric" maxlength="5" />
-    </label>
-    <label for="year">Year
-      <select id="year">
-        <option value="2025" selected>2025</option>
-      </select>
-    </label>
-    <button id="go" type="button">Lookup</button>
-    <button id="dump" type="button" class="btn-secondary" title="Print all embedded plan JSON below">Show all plan JSON (dump)</button>
-  </div>
-
-  <!-- Data source controls: paste one or more dataset bases (pipe/comma separated). Saved to localStorage. -->
-  <details id="ds">
-    <summary>Data source (advanced)</summary>
-    <div class="row" style="margin-top:8px;">
-      <input id="bases" placeholder="e.g. https://cdn.jsdelivr.net/gh/<user>/<repo>@main/ | https://raw.githubusercontent.com/<user>/<repo>/main/" />
-      <button id="apply" type="button">Apply</button>
-      <button id="reset" type="button">Reset</button>
-      <button id="test" type="button">Test</button>
+  <header>
+    <div class="wrap topbar">
+      <div class="brand">
+        <span class="dot"></span>
+        <h1>Medicare Advantage — Data Explorer</h1>
+      </div>
+      <nav role="tablist" aria-label="Views">
+        <button class="tab" role="tab" data-view="carriers" aria-selected="true">Carriers</button>
+        <button class="tab" role="tab" data-view="plans">Plans</button>
+        <button class="tab" role="tab" data-view="premiums">Premiums</button>
+      </nav>
     </div>
-    <div id="basesInfo" class="muted"></div>
-  </details>
+  </header>
 
-  <div id="msg" class="muted" aria-live="polite"></div>
-  <div id="out"></div>
-  <div id="dumpZone"></div>
+  <main class="wrap">
+    <!-- Data controls -->
+    <section class="panel">
+      <div class="row">
+        <div class="grow">
+          <div class="hint">Load your dataset (auto-attempts <code>data/ma-plans.json</code> on page load). File must be JSON array of plan objects.</div>
+        </div>
+        <input type="file" id="file" accept=".json" />
+        <button id="reload" class="tab" title="Reload default">Reload default</button>
+      </div>
+      <div id="load-status" class="hint" style="margin-top:8px;"></div>
+    </section>
 
-  <script type="module">
-    // ----------------- Utilities -----------------
-    const $ = (id) => document.getElementById(id);
-    const setMsg = (t, color='#b00') => { const m = $('msg'); m.style.color=color; m.textContent = t; };
-    const info = (t) => setMsg(t, '#555');
-    const ok = (t) => setMsg(t, 'var(--ok)');
-    const pad3 = (v) => String(v ?? '').replace(/\D/g, '').padStart(3, '0');
-    const normalizeZip = (z) => String(z ?? '').replace(/\D/g, '').padStart(5, '0');
+    <!-- Views -->
+    <section id="view-carriers" class="panel" style="margin-top:16px">
+      <div class="row">
+        <div class="grow">
+          <h2 style="margin:0 0 4px 0">Carriers overview</h2>
+          <div class="hint">Aggregated by <b>Organization</b> (a.k.a. carrier). Shows plan count and premium stats.</div>
+        </div>
+        <input id="carrier-filter" placeholder="Filter carriers…" />
+      </div>
+      <div id="carriers-empty" class="empty hidden">No carriers to display.</div>
+      <table id="carriers-table" class="hidden">
+        <thead>
+          <tr>
+            <th>Carrier</th>
+            <th>Plans</th>
+            <th>Avg Premium</th>
+            <th>Min</th>
+            <th>Max</th>
+            <th>States</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
 
-    if (location.protocol === 'file:') {
-      info('⚠️ file:// detected. Use a local server (e.g., `npx serve`) so fetch() can load JSON.');
+    <section id="view-plans" class="panel hidden" style="margin-top:16px">
+      <div class="row">
+        <div class="grow">
+          <h2 style="margin:0 0 4px 0">Plans</h2>
+          <div class="hint">Full list with contract & plan IDs. Columns adapt to keys present in your JSON.</div>
+        </div>
+        <input id="plan-search" placeholder="Search plans, counties, IDs…" />
+        <select id="state-select"><option value="">All States</option></select>
+      </div>
+      <div id="plans-empty" class="empty hidden">No plans match.</div>
+      <table id="plans-table" class="hidden">
+        <thead><tr id="plans-head"></tr></thead>
+        <tbody id="plans-body"></tbody>
+      </table>
+    </section>
+
+    <section id="view-premiums" class="panel hidden" style="margin-top:16px">
+      <div class="row">
+        <div class="grow">
+          <h2 style="margin:0 0 4px 0">Premiums</h2>
+          <div class="hint">Filter by state and premium range. Premium key auto-detected (e.g., <code>premium</code> or <code>monthlyPremium</code>).</div>
+        </div>
+        <select id="prem-state"><option value="">All States</option></select>
+        <input id="prem-min" type="number" placeholder="Min $" min="0" step="1" style="width:110px" />
+        <input id="prem-max" type="number" placeholder="Max $" min="0" step="1" style="width:110px" />
+        <button id="prem-clear" class="tab">Clear</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="stat">
+          <span class="hint">Plans:</span><b id="prem-count">0</b>
+          <span class="hint">Avg Premium:</span><b id="prem-avg">$0</b>
+          <span class="hint">Min / Max:</span><b id="prem-minmax">$0 — $0</b>
+        </div>
+      </div>
+      <div id="prem-empty" class="empty hidden">No plans in range.</div>
+      <table id="prem-table" class="hidden">
+        <thead>
+          <tr>
+            <th>Carrier</th>
+            <th>Plan Name</th>
+            <th>Contract</th>
+            <th>PlanID</th>
+            <th>State</th>
+            <th>County</th>
+            <th>Premium</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <footer class="wrap" style="padding-left:0;padding-right:0">
+      <div class="hint">Tip: This page never navigates, so routes won’t 404. Use the tabs above to switch views.</div>
+    </footer>
+  </main>
+
+  <script>
+    // -------- Utilities --------
+    const $ = sel => document.querySelector(sel);
+    const fmt$ = n => isFinite(n) ? "$" + Number(n).toFixed(2) : "—";
+    const by = k => (a,b)=> (a[k]??"").toString().localeCompare((b[k]??"").toString(),undefined,{numeric:true,sensitivity:"base"});
+    const toNum = v => {
+      if (v==null) return NaN;
+      if (typeof v === "number") return v;
+      const s = String(v).replace(/[^0-9.\-]/g,'');
+      return s ? Number(s) : NaN;
+    };
+
+    // -------- State --------
+    let RAW = [];              // the raw plans array
+    let KEYS = new Set();      // union of keys observed
+    let PREMIUM_KEY = null;    // detected premium key
+    const STATE_KEY_CANDIDATES = ["state","State","STATE","planState","serviceAreaState"];
+    const COUNTY_KEY_CANDIDATES = ["county","County","COUNTY","serviceAreaCounty","countyName"];
+    const CARRIER_KEY_CANDIDATES = ["organization","Organization","carrier","Carrier","orgMarketingName","OrganizationMarketingName"];
+    const PLANNAME_KEYS = ["planName","PlanName","plan_name","marketingName","MarketingName"];
+    const CONTRACT_KEYS = ["contractId","ContractID","contractID","Contract","contract"];
+    const PLANID_KEYS = ["planId","PlanID","planID","Plan Number","planNumber"];
+
+    function pickKey(obj, candidates){
+      for (const k of candidates){ if (k in obj) return k; }
+      return null;
     }
 
-    // ----------------- Multi-source dataset bases -----------------
-    // Repo root (even though this file lives in /web-demo/)
-    const PAGES_BASE = (() => {
-      const { origin, pathname } = location;
-      const m = pathname.match(/^(.*?)(\/web-demo\/.*)$/);
-      return origin + (m ? m[1] + '/' : pathname.replace(/[^/]*$/, ''));
-    })();
-
-    // Infer <user>/<repo> for CDN/raw
-    const GH_USER = location.hostname.endsWith('github.io') ? location.hostname.split('.')[0] : null;
-    const GH_REPO = (location.pathname.split('/')[1] || '').trim();
-    const CDN_BASE = (GH_USER && GH_REPO) ? `https://cdn.jsdelivr.net/gh/${GH_USER}/${GH_REPO}@main/` : null;
-    const RAW_BASE = (GH_USER && GH_REPO) ? `https://raw.githubusercontent.com/${GH_USER}/${GH_REPO}/main/` : null;
-
-    const addSlash = (s) => s ? (s.endsWith('/') ? s : s + '/') : s;
-    const parseList = (s) => (s || '').split(/[|,;\s]+/).map(x => addSlash(x.trim())).filter(Boolean);
-
-    // Allow override via ?data=
-    const QUERY_BASES = parseList(new URLSearchParams(location.search).get('data') || '');
-    const SAVED_BASES = parseList(localStorage.getItem('dataBases') || '');
-
-    // Known optional fallbacks (edit/remove if you don't use them)
-    const KNOWN_FALLBACKS = [
-      // Example external dataset repo(s). Leave empty or replace with your actual dataset repo(s).
-      // 'https://cdn.jsdelivr.net/gh/youruser/your-dataset-repo@main/',
-      // 'https://raw.githubusercontent.com/youruser/your-dataset-repo/main/'
-    ];
-
-    let DATA_BASES = Array.from(new Set(
-      [PAGES_BASE, ...QUERY_BASES, ...SAVED_BASES, CDN_BASE, RAW_BASE, ...KNOWN_FALLBACKS]
-        .filter(Boolean)
-        .map(addSlash)
-    ));
-
-    function refreshBasesInfo() {
-      $('bases').value = DATA_BASES.join(' | ');
-      $('basesInfo').textContent = 'Active bases (in order):\n' + DATA_BASES.join('\n');
-    }
-    function setBases(list) {
-      DATA_BASES = Array.from(new Set(list.filter(Boolean).map(addSlash)));
-      localStorage.setItem('dataBases', DATA_BASES.join('|'));
-      refreshBasesInfo();
-    }
-    refreshBasesInfo();
-
-    async function fetchJsonFromAny(relPath) {
-      const errors = [];
-      for (const base of DATA_BASES) {
-        const url = base + relPath;
-        try {
-          const r = await fetch(url, { cache: 'no-store' });
-          if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-          return { json: await r.json(), url };
-        } catch (e) { errors.push(`- ${url} → ${e.message}`); }
+    function detectPremiumKey(sample){
+      const candidates = ["premium","Premium","monthlyPremium","MonthlyPremium","memberPremium","Part_C_Premium"];
+      for (const k of candidates){ if (k in sample && isFinite(toNum(sample[k]))) return k; }
+      // last resort: any key with "premium" in name that parses numeric
+      for (const k in sample){
+        if (/premium/i.test(k) && isFinite(toNum(sample[k]))) return k;
       }
-      throw new Error(`All sources failed for ${relPath}:\n${errors.join('\n')}`);
+      return null;
     }
 
-    const loadZipIndex = (year) => fetchJsonFromAny(`years/${year}/zip-index.json`).then(r => r.json);
-
-    // ---------- Full plan loader (tries many filenames) ----------
-    function extractIds(plan) {
-      const year = $('year')?.value || '2025';
-      const contract = (plan.contract || plan.contractId || plan.contract_id || plan.ContractID || '').toString().toUpperCase().trim();
-      const pbp = pad3(plan.pbp ?? plan.planId ?? plan.plan_id ?? plan.PBP ?? '');
-      const segment = pad3(plan.segmentId ?? plan.segment_id ?? plan.segment ?? '000');
-      const cmsKey = plan.cmsPlanKey || plan.CMSPlanKey || `${year}-${contract}-${pbp}-${segment}`;
-      return { year, contract, pbp, segment, cmsKey };
+    function unionKeys(arr){
+      const s = new Set();
+      arr.slice(0,2000).forEach(o => Object.keys(o||{}).forEach(k=>s.add(k)));
+      return s;
     }
 
-    function relPlanPaths({ year, contract, pbp, segment, cmsKey }) {
-      const y = year, c = contract, p = pbp, s = segment || '000';
+    // -------- View switching (no navigation => no 404s) --------
+    const VIEWS = ["carriers","plans","premiums"];
+    function show(view){
+      VIEWS.forEach(v=>{
+        const selected = v===view;
+        document.getElementById(`view-${v}`).classList.toggle("hidden", !selected);
+        document.querySelector(`[data-view="${v}"]`).setAttribute("aria-selected", selected ? "true" : "false");
+      });
+      location.hash = "#"+view;
+    }
+    document.querySelectorAll('[data-view]').forEach(btn=>{
+      btn.addEventListener('click', ()=> show(btn.dataset.view));
+    });
+
+    // -------- Data loading --------
+    async function tryFetchDefault(){
+      setStatus("Loading data from <code>data/ma-plans.json</code> …");
+      try{
+        const res = await fetch("data/ma-plans.json", {cache:"no-store"});
+        if(!res.ok) throw new Error(res.status+" "+res.statusText);
+        const json = await res.json();
+        setData(json, "Loaded data/ma-plans.json ("+json.length+" plans).");
+      }catch(e){
+        setStatus('Default load failed. Using <span class="badge-warn">small sample</span> so you can verify UI. Load your real file above when ready.');
+        setData(sampleData(), "Sample loaded ("+sampleData().length+" plans).");
+      }
+    }
+
+    function setStatus(html){ $("#load-status").innerHTML = html; }
+    function setData(arr, msg){
+      RAW = Array.isArray(arr) ? arr : [];
+      KEYS = unionKeys(RAW);
+      if (RAW.length){
+        PREMIUM_KEY = detectPremiumKey(RAW[0]) || "premium";
+      } else {
+        PREMIUM_KEY = "premium";
+      }
+      setStatus(msg + ` Using premium key: <code>${PREMIUM_KEY}</code>.`);
+      renderAll();
+    }
+
+    // -------- Rendering --------
+    function renderAll(){
+      renderCarriers();
+      renderPlans();
+      renderPremiums();
+    }
+
+    function getKey(obj, candidates){ return pickKey(obj, candidates); }
+    function getValue(obj, candidates){ const k = pickKey(obj, candidates); return k ? obj[k] : undefined; }
+
+    // Carriers
+    function renderCarriers(){
+      const tbody = $("#carriers-table tbody");
+      const table = $("#carriers-table");
+      const empty = $("#carriers-empty");
+      const q = ($("#carrier-filter").value||"").trim().toLowerCase();
+
+      const rows = [];
+      for (const p of RAW){
+        const carrier = (getValue(p, CARRIER_KEY_CANDIDATES) ?? "Unknown").toString();
+        const prem = toNum(p[PREMIUM_KEY]);
+        const st = (getValue(p, STATE_KEY_CANDIDATES) ?? "").toString();
+        rows.push({carrier, prem, st});
+      }
+      const byCarrier = new Map();
+      rows.forEach(r=>{
+        if(!byCarrier.has(r.carrier)) byCarrier.set(r.carrier, {count:0, prems:[], states:new Set()});
+        const g = byCarrier.get(r.carrier);
+        g.count++; if(isFinite(r.prem)) g.prems.push(r.prem);
+        if(r.st) g.states.add(r.st);
+      });
+
+      let data = Array.from(byCarrier.entries()).map(([carrier,g])=>{
+        const avg = g.prems.length ? g.prems.reduce((a,b)=>a+b,0)/g.prems.length : NaN;
+        const min = g.prems.length ? Math.min(...g.prems) : NaN;
+        const max = g.prems.length ? Math.max(...g.prems) : NaN;
+        return {carrier, count:g.count, avg, min, max, states:Array.from(g.states).sort()};
+      });
+
+      if (q) data = data.filter(d=> d.carrier.toLowerCase().includes(q));
+
+      data.sort((a,b)=> b.count - a.count || (a.carrier.localeCompare(b.carrier)));
+
+      tbody.innerHTML = data.map(d=>`
+        <tr>
+          <td><span class="pill">${d.carrier}</span></td>
+          <td>${d.count}</td>
+          <td>${fmt$(d.avg)}</td>
+          <td>${fmt$(d.min)}</td>
+          <td>${fmt$(d.max)}</td>
+          <td>${d.states.join(", ")||"—"}</td>
+        </tr>
+      `).join("");
+
+      const has = data.length>0;
+      table.classList.toggle("hidden", !has);
+      empty.classList.toggle("hidden", has);
+    }
+
+    // Plans
+    function renderPlans(){
+      const head = $("#plans-head");
+      const body = $("#plans-body");
+      const table = $("#plans-table");
+      const empty = $("#plans-empty");
+
+      const q = ($("#plan-search").value||"").toLowerCase();
+      const st = $("#state-select").value;
+
+      // columns: prioritize useful ones but include whatever exists
+      const baseCols = Array.from(new Set([
+        pickKeySample(CARRIER_KEY_CANDIDATES) || "carrier",
+        pickKeySample(PLANNAME_KEYS) || "planName",
+        pickKeySample(CONTRACT_KEYS) || "contractId",
+        pickKeySample(PLANID_KEYS) || "planId",
+        pickKeySample(STATE_KEY_CANDIDATES) || "state",
+        pickKeySample(COUNTY_KEY_CANDIDATES) || "county",
+        PREMIUM_KEY
+      ].filter(Boolean)));
+
+      // plus a couple more discovered keys (up to 3)
+      const extra = Array.from(KEYS).filter(k=>!baseCols.includes(k)).slice(0,3);
+      const COLS = baseCols.concat(extra);
+
+      head.innerHTML = COLS.map(c=>`<th>${c}</th>`).join("");
+
+      let data = RAW.slice();
+
+      if (st) {
+        const k = pickKeySample(STATE_KEY_CANDIDATES);
+        data = k ? data.filter(p => String(p[k]).toUpperCase() === st) : [];
+      }
+
+      if (q){
+        const qn = Number.isNaN(Number(q)) ? null : Number(q);
+        data = data.filter(p=>{
+          const s = JSON.stringify(p).toLowerCase();
+          if (s.includes(q)) return true;
+          // also allow numeric search for premium matches
+          if (qn!=null && isFinite(qn)){
+            const v = toNum(p[PREMIUM_KEY]);
+            return isFinite(v) && String(v).includes(String(qn));
+          }
+          return false;
+        });
+      }
+
+      body.innerHTML = data.slice(0,2000).map(p=>{
+        return `<tr>${COLS.map(c=>{
+          const v = p[c];
+          const isPrem = c===PREMIUM_KEY;
+          return `<td>${isPrem?fmt$(toNum(v)):(v??"")}</td>`;
+        }).join("")}</tr>`;
+      }).join("");
+
+      const has = data.length>0;
+      table.classList.toggle("hidden", !has);
+      empty.classList.toggle("hidden", has);
+
+      // state dropdowns (populate once from RAW)
+      const states = new Set();
+      const stKey = pickKeySample(STATE_KEY_CANDIDATES);
+      RAW.forEach(p=>{ if (stKey && p[stKey]) states.add(String(p[stKey]).toUpperCase()); });
+      const opts = ['<option value="">All States</option>'].concat(
+        Array.from(states).sort().map(s=>`<option value="${s}">${s}</option>`)
+      ).join("");
+      $("#state-select").innerHTML = opts;
+      $("#prem-state").innerHTML = opts;
+    }
+
+    // Premiums
+    function renderPremiums(){
+      const st = $("#prem-state").value;
+      const min = toNum($("#prem-min").value);
+      const max = toNum($("#prem-max").value);
+
+      const tbody = $("#prem-table tbody");
+      const table = $("#prem-table");
+      const empty = $("#prem-empty");
+
+      let data = RAW.slice();
+
+      if (st){
+        const k = pickKeySample(STATE_KEY_CANDIDATES);
+        data = k ? data.filter(p => String(p[k]).toUpperCase() === st) : [];
+      }
+      data = data.filter(p=>{
+        const v = toNum(p[PREMIUM_KEY]);
+        if (!isFinite(v)) return false;
+        if (isFinite(min) && v < min) return false;
+        if (isFinite(max) && v > max) return false;
+        return true;
+      });
+
+      tbody.innerHTML = data.slice(0,2000).map(p=>{
+        const carrier = getValue(p, CARRIER_KEY_CANDIDATES) ?? "";
+        const plan = getValue(p, PLANNAME_KEYS) ?? "";
+        const contract = getValue(p, CONTRACT_KEYS) ?? "";
+        const planId = getValue(p, PLANID_KEYS) ?? "";
+        const state = getValue(p, STATE_KEY_CANDIDATES) ?? "";
+        const county = getValue(p, COUNTY_KEY_CANDIDATES) ?? "";
+        const prem = fmt$(toNum(p[PREMIUM_KEY]));
+        return `<tr>
+          <td>${carrier}</td>
+          <td>${plan}</td>
+          <td>${contract}</td>
+          <td>${planId}</td>
+          <td>${state}</td>
+          <td>${county}</td>
+          <td>${prem}</td>
+        </tr>`;
+      }).join("");
+
+      const has = data.length>0;
+      table.classList.toggle("hidden", !has);
+      empty.classList.toggle("hidden", has);
+
+      // stats
+      const vals = data.map(p=>toNum(p[PREMIUM_KEY])).filter(Number.isFinite);
+      const avg = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : NaN;
+      const mn = vals.length ? Math.min(...vals) : NaN;
+      const mx = vals.length ? Math.max(...vals) : NaN;
+      $("#prem-count").textContent = data.length;
+      $("#prem-avg").textContent = fmt$(avg);
+      $("#prem-minmax").textContent = `${fmt$(mn)} — ${fmt$(mx)}`;
+    }
+
+    function pickKeySample(candidates){
+      if (!RAW.length) return null;
+      return pickKey(RAW[0], candidates);
+    }
+
+    // -------- Events --------
+    $("#carrier-filter").addEventListener("input", renderCarriers);
+    $("#plan-search").addEventListener("input", renderPlans);
+    $("#state-select").addEventListener("change", renderPlans);
+
+    $("#prem-state").addEventListener("change", renderPremiums);
+    $("#prem-min").addEventListener("input", renderPremiums);
+    $("#prem-max").addEventListener("input", renderPremiums);
+    $("#prem-clear").addEventListener("click", ()=>{
+      $("#prem-state").value = "";
+      $("#prem-min").value = "";
+      $("#prem-max").value = "";
+      renderPremiums();
+    });
+
+    $("#file").addEventListener("change", async (e)=>{
+      const f = e.target.files?.[0];
+      if (!f) return;
+      try{
+        const txt = await f.text();
+        const json = JSON.parse(txt);
+        setData(json, `Loaded <code>${f.name}</code> (${json.length} plans).`);
+      }catch(err){
+        setStatus(`<span class="badge-bad">Failed to parse file:</span> ${String(err)}`);
+      }
+    });
+
+    $("#reload").addEventListener("click", tryFetchDefault);
+
+    // initial view
+    const initial = (location.hash||"").replace("#","") || "premiums";
+    show(VIEWS.includes(initial)?initial:"premiums");
+
+    // kick off load
+    tryFetchDefault();
+
+    // -------- Small built-in sample (so the page always runs) --------
+    function sampleData(){
       return [
-        `years/${y}/by-plan/${c}-${p}-${s}.json`,
-        `years/${y}/plan-details/${c}-${p}-${s}.json`,
-        `years/${y}/plans/${c}-${p}-${s}.json`,
-        `years/${y}/by-plan/${c}/${p}-${s}.json`,
-        `years/${y}/by-plan/${c}/${p}/${s}.json`,
-        `years/${y}/plans/${c}/${p}-${s}.json`,
-        `years/${y}/plans/${c}/${p}/${s}.json`,
-        `years/${y}/by-plan/${cmsKey}.json`,
-        `years/${y}/plan-details/${cmsKey}.json`,
-        `years/${y}/plans/${cmsKey}.json`,
-        `years/${y}/by-plan/${c}-${p}.json`,
-        `years/${y}/plan-details/${c}-${p}.json`,
-        `years/${y}/plans/${c}-${p}.json`,
-        `years/${y}/by-plan/${c}/${p}.json`,
-        `years/${y}/plans/${c}/${p}.json`,
-        `years/${y}/by-plan/${c}-${p}-${s}.min.json`,
-        `years/${y}/by-plan/${c}-${p}.min.json`,
+        {
+          "organization":"Acme Health",
+          "planName":"Acme MA Classic (H1111-001)",
+          "contractId":"H1111","planId":"001","state":"MN","county":"Hennepin",
+          "premium":0, "moop":5900
+        },
+        {
+          "organization":"Acme Health",
+          "planName":"Acme MA Plus (H1111-002)",
+          "contractId":"H1111","planId":"002","state":"MN","county":"Ramsey",
+          "premium":29, "moop":4500
+        },
+        {
+          "organization":"BetterCare",
+          "planName":"BetterCare Gold (H2222-004)",
+          "contractId":"H2222","planId":"004","state":"WI","county":"Dane",
+          "monthlyPremium":49, "moop":3900
+        },
+        {
+          "organization":"BetterCare",
+          "planName":"BetterCare Silver (H2222-003)",
+          "contractId":"H2222","planId":"003","state":"WI","county":"Milwaukee",
+          "monthlyPremium":19, "moop":5500
+        }
       ];
     }
-
-    async function loadFullPlan(planOrIds) {
-      const ids = ('contract' in planOrIds && 'pbp' in planOrIds && 'year' in planOrIds)
-        ? planOrIds
-        : extractIds(planOrIds);
-      const errors = [];
-      for (const rel of relPlanPaths(ids)) {
-        try {
-          const { json, url } = await fetchJsonFromAny(rel);
-          return { json, url };
-        } catch (e) { errors.push(e.message); }
-      }
-      throw new Error(`No plan JSON found for ${ids.contract}-${ids.pbp}. Last errors:\n- ${errors.slice(-5).join('\n- ')}`);
-    }
-
-    // Expose to external plan-picker.js (optional)
-    window.__loadPlanJSON = async (contract, pbp, year, segment='000', cmsKey=null) => {
-      const ids = {
-        contract: (contract||'').toString().toUpperCase().trim(),
-        pbp: pad3(pbp),
-        year: year || $('year')?.value || '2025',
-        segment: pad3(segment || '000'),
-        cmsKey: cmsKey || `${year || $('year')?.value || '2025'}-${(contract||'').toString().toUpperCase().trim()}-${pad3(pbp)}-${pad3(segment||'000')}`
-      };
-      return loadFullPlan(ids);
-    };
-
-    // ----------------- Rendering -----------------
-    let LAST_COUNTY = null;
-
-    function renderCountySummary(parent, county) {
-      LAST_COUNTY = county;
-      parent.innerHTML = '';
-      if (!county) return setMsg('County JSON empty.');
-
-      const header = document.createElement('h3');
-      header.textContent = `${county.county_name}, ${county.state} — ${(county.carriers?.length ?? 0)} carriers`;
-      parent.appendChild(header);
-
-      const carriers = county.carriers ?? [];
-      if (!carriers.length) { return setMsg('No carriers found in county JSON.'); }
-
-      carriers.forEach(c => {
-        const row = document.createElement('div');
-        row.className = 'carrier';
-
-        const top = document.createElement('div'); top.className='row';
-
-        const name = document.createElement('strong');
-        name.className = 'name';
-        name.textContent = c.orgName || 'Carrier';
-        name.title = 'Click to choose a plan';
-        name.tabIndex = 0;
-        name.addEventListener('click', () => {
-          const plans = Array.isArray(c.plans) ? c.plans : [];
-          if (window.PlanPicker?.open) {
-            PlanPicker.open(plans, { title: `${c.orgName || 'Carrier'} — choose a plan` });
-          }
-        });
-        name.addEventListener('keydown', (e) => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); name.click(); } });
-
-        const idsTxt = Array.isArray(c.contractIds) ? c.contractIds.join(', ') : '';
-        const contracts = document.createElement('span');
-        contracts.className = 'badge';
-        contracts.textContent = idsTxt;
-
-        const count = document.createElement('span');
-        count.className = 'muted';
-        const plansArray = (c.plans ?? []);
-        const n = plansArray.length;
-        count.textContent = ` — ${n} plan${n === 1 ? '' : 's'}`;
-
-        top.appendChild(name);
-        if (idsTxt) top.appendChild(contracts);
-        top.appendChild(count);
-        row.appendChild(top);
-
-        if (n) {
-          const chips = document.createElement('div');
-          plansArray.forEach(p => {
-            const ids = extractIds(p);
-            const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
-
-            const chip = document.createElement('button');
-            chip.type = 'button';
-            chip.className = 'plan-chip';
-            chip.textContent = `${ids.contract} ${ids.pbp}${premium!=null ? ` — $${Number(premium).toFixed(2)}/mo` : ''}`;
-
-            const loader = async () => {
-              try {
-                const { json, url } = await loadFullPlan(p);
-                return { __provenance: url, ...json };
-              } catch {
-                return { __provenance: 'county JSON (fallback)', ...p };
-              }
-            };
-
-            if (window.PlanViewer?.register) {
-              PlanViewer.register(chip, loader, {
-                title: `${ids.contract} - ${ids.pbp}`,
-                hint: 'Prefers full plan file; falls back to county JSON'
-              });
-            } else {
-              chip.addEventListener('click', async () => {
-                const data = await loader();
-                window.PlanViewer?.show?.(data, { title: `${ids.contract} - ${ids.pbp}`, hint: data.__provenance });
-              });
-            }
-            chips.appendChild(chip);
-          });
-          row.appendChild(chips);
-        } else {
-          const none = document.createElement('div');
-          none.className = 'muted';
-          none.textContent = 'No plans listed for this carrier.';
-          row.appendChild(none);
-        }
-
-        parent.appendChild(row);
-      });
-    }
-
-    async function lookup() {
-      $('msg').textContent = ''; $('out').innerHTML = ''; $('dumpZone').innerHTML = '';
-      const year = $('year').value;
-      const zip = normalizeZip($('zip').value);
-      if (!/^\d{5}$/.test(zip)) return setMsg('Please enter a 5-digit ZIP.');
-
-      try {
-        const idx = await loadZipIndex(year);
-        const rec = idx.find(e => e.zip === zip);
-        if (!rec) return setMsg(`ZIP ${zip} is not in the index. Try a nearby residential ZIP (not PO Box).`);
-        if (!(rec.counties?.length)) return setMsg(`ZIP ${zip} returned no counties.`);
-
-        const [fips] = rec.counties[0];
-        const { json: county, url } = await fetchJsonFromAny(`years/${year}/by-county/${fips}.json`);
-        console.log('County from:', url);
-        renderCountySummary($('out'), county);
-
-        if (rec.counties.length > 1) {
-          const hint = document.createElement('div');
-          hint.className = 'muted';
-          const other = rec.counties.slice(1).map(([f]) => f).join(', ');
-          hint.textContent = `Note: ZIP ${zip} spans multiple counties; showing top match FIPS ${fips}. Others: ${other || '—'}.`;
-          $('out').appendChild(hint);
-        }
-        ok(`Loaded county ${fips}. Click a carrier or plan chip.`);
-      } catch (e) {
-        console.error(e); setMsg('Error: ' + (e?.message || e));
-      }
-    }
-
-    function dumpAllPlans() {
-      $('dumpZone').innerHTML = '';
-      if (!LAST_COUNTY) { return setMsg('Load a ZIP first, then click "Show all plan JSON".'); }
-      const carriers = LAST_COUNTY.carriers ?? [];
-      const allPlans = carriers.flatMap(c => Array.isArray(c.plans) ? c.plans : []);
-      if (!allPlans.length) { return setMsg('This county JSON does not embed plan objects. No plan data to dump.'); }
-      const pre = document.createElement('pre');
-      pre.style.font = '12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
-      pre.style.background = '#fafafa'; pre.style.border = '1px solid #eee';
-      pre.style.padding = '10px'; pre.style.borderRadius = '8px'; pre.style.whiteSpace = 'pre-wrap';
-      pre.textContent = JSON.stringify(allPlans, null, 2);
-      $('dumpZone').appendChild(pre);
-      info(`Dumped ${allPlans.length} plan objects below.`);
-    }
-
-    // Data source UI
-    $('apply').onclick = () => setBases(parseList($('bases').value));
-    $('reset').onclick = () => setBases([PAGES_BASE, CDN_BASE, RAW_BASE].filter(Boolean));
-    $('test').onclick = async () => {
-      $('msg').textContent = '';
-      try {
-        const y = $('year').value;
-        const { url } = await fetchJsonFromAny(`years/${y}/zip-index.json`);
-        ok(`OK: ${url}`);
-      } catch (e) { setMsg('Error: ' + (e?.message || e)); }
-    };
-
-    // Wire up
-    window.addEventListener('DOMContentLoaded', () => {
-      if (typeof PlanViewer?.init === 'function') { try { PlanViewer.init(); } catch {} }
-      $('go').addEventListener('click', lookup);
-      $('zip').addEventListener('keydown', (e) => { if (e.key === 'Enter') lookup(); });
-      $('dump').addEventListener('click', dumpAllPlans);
-    });
   </script>
 </body>
 </html>
-
