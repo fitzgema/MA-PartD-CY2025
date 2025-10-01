@@ -92,23 +92,17 @@
     const PLAN_CODE = "H2458-002";
     const BASE = ""; // relative
 
-    const ENDPOINTS = {
-      plans: [
-        `${BASE}years/2025/plans/${PLAN_CODE}.json`,
-        `https://fitzgema.github.io/MA-PartD-CY2025/years/2025/plans/${PLAN_CODE}.json`,
-        `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/2025/plans/${PLAN_CODE}.json`
-      ],
-      byplan: [
-        `${BASE}years/2025/by-plan/${PLAN_CODE}.json`,
-        `https://fitzgema.github.io/MA-PartD-CY2025/years/2025/by-plan/${PLAN_CODE}.json`,
-        `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/2025/by-plan/${PLAN_CODE}.json`
-      ],
-      details: [
-        `${BASE}years/2025/plan-details/${PLAN_CODE}.json`,
-        `https://fitzgema.github.io/MA-PartD-CY2025/years/2025/plan-details/${PLAN_CODE}.json`,
-        `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/2025/plan-details/${PLAN_CODE}.json`
-      ]
-    };
+  const ENDPOINTS = {
+    plans: [
+      "https://fitzgema.github.io/MA-PartD-CY2025/years/2025/plans/H2458-002.json"
+    ],
+    byplan: [
+      "https://fitzgema.github.io/MA-PartD-CY2025/years/2025/by-plan/H2458-002.json"
+    ],
+    details: [
+      "https://fitzgema.github.io/MA-PartD-CY2025/years/2025/plan-details/H2458-002.json"
+    ]
+  };
 
     const $ = s => document.querySelector(s);
     const fmt$ = n => (Number.isFinite(Number(n)) ? `$${Number(n).toFixed(2)}` : (n ?? ""));
