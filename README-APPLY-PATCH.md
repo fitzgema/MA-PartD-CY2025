@@ -1,20 +1,19 @@
-# MA-PartD-CY2025 Patch
+# ZIP → Plans → Details Patch
 
-**What this includes**
-- `.nojekyll` — required so GitHub Pages serves JSON as-is.
-- `index.html` — single-page viewer that loads:
-  - `years/2025/plans/H2458-002.json`
-  - `years/2025/by-plan/H2458-002.json`
-  - `years/2025/plan-details/H2458-002.json`
-  It also auto-falls back to `raw.githubusercontent.com` so you can test immediately even if Pages isn’t on yet.
-- The three JSON files above (sample data).
+This update adds:
+- `years/2025/zips/<zip>.json` lookup files (ZIP → list of plans).
+- New `index.html` with a ZIP input. Enter a ZIP, see all available plans, click one to load its details from:
+  - `years/2025/plans/<CODE>.json`
+  - `years/2025/by-plan/<CODE>.json`
+  - `years/2025/plan-details/<CODE>.json`
 
-**How to apply**
-1. Copy the files/folders into the **repo root** of `MA-PartD-CY2025`.
-2. Commit & push.
-3. If using GitHub Pages, ensure Pages is enabled on the repo. The JSON URLs will then resolve:
-   - https://fitzgema.github.io/MA-PartD-CY2025/years/2025/plans/H2458-002.json
-   - https://fitzgema.github.io/MA-PartD-CY2025/years/2025/by-plan/H2458-002.json
-   - https://fitzgema.github.io/MA-PartD-CY2025/years/2025/plan-details/H2458-002.json
+### Sample included
+- `years/2025/zips/55401.json` → contains one plan `H2458-002` (matching the existing sample).
 
-You can open `index.html` locally or via Pages to verify everything renders.
+### How to use
+1) Copy these files into the **repo root**.
+2) Commit & push to the branch GitHub Pages publishes.
+3) Create real `years/2025/zips/<zip>.json` files for your target ZIPs.
+   - Each item in the array should include: `zip,state,county,contractId,planId,planCode,organization,planName,premium,starRating,type`
+
+The `index.html` first tries your GitHub Pages URLs and automatically falls back to `raw.githubusercontent.com` so it works immediately.
