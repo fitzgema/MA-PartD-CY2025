@@ -1,0 +1,15 @@
+[
+  {
+    "zip": "55401",
+    "state": "MN",
+    "county": "Hennepin",
+    "contractId": "H2458",
+    "planId": "002",
+    "planCode": "H2458-002",
+    "organization": "Acme Health",
+    "planName": "Acme MA Plus",
+    "premium": 29,
+    "starRating": 4.5,
+    "type": "HMO-POS"
+  }
+]
