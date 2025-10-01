@@ -1,0 +1,14 @@
+[
+  {
+    "organization": "Acme Health",
+    "marketingName": "Acme MA Plus",
+    "contractId": "H2458",
+    "planId": "002",
+    "state": "MN",
+    "county": "Hennepin",
+    "premium": 29,
+    "moop": 4500,
+    "starRating": 4.5,
+    "type": "HMO-POS"
+  }
+]
