@@ -3,285 +3,287 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MA-PartD CY2025 — ZIP → Plans → Details</title>
+  <title>MA / Part D — ZIP → Plans → Details (Year-aware)</title>
   <style>
-    :root{--bg:#0b1220;--panel:#0f172a;--ink:#e5e7eb;--muted:#94a3b8;--border:#1e293b;--accent:#60a5fa;}
-    *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#0b1220,#0a0f1a);color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
-    header{position:sticky;top:0;z-index:10;background:rgba(10,15,26,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
-    .wrap{max-width:1100px;margin:0 auto;padding:18px}
-    .top{display:flex;gap:12px;align-items:center;justify-content:space-between}
-    h1{font-size:18px;margin:0;font-weight:600}
+    :root{--bg:#0b1220;--panel:#0f172a;--ink:#e5e7eb;--muted:#94a3b8;--border:#1e293b}
+    *{box-sizing:border-box} body{margin:0;background:#0b1220;color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    header{position:sticky;top:0;z-index:10;background:#0b1220cc;backdrop-filter:blur(6px);border-bottom:1px solid var(--border)}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
     nav{display:flex;gap:8px;flex-wrap:wrap}
-    .tab{border:1px solid var(--border);background:#0f172a;padding:10px 12px;border-radius:10px;cursor:pointer}
-    .tab[aria-selected="true"]{border-color:#2b3b55;background:#111b2e;outline:2px solid #1d4ed8}
-    main{padding:18px}
-    .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-top:14px}
-    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    .grow{flex:1 1 auto}
+    .tab,.btn{border:1px solid var(--border);background:#0f172a;padding:10px 12px;border-radius:10px;cursor:pointer}
+    .tab[aria-selected="true"]{outline:2px solid #1d4ed8}
+    .panel{background:#0f172a;border:1px solid var(--border);border-radius:14px;padding:14px;margin:14px 0}
+    .kv{display:grid;grid-template-columns:180px 1fr;gap:6px 10px}
     .hint{color:var(--muted);font-size:13px}
     table{width:100%;border-collapse:collapse;margin-top:10px}
     th,td{padding:9px;border-bottom:1px solid var(--border);text-align:left;font-size:14px}
-    th{font-weight:600;color:var(--muted)}
-    .kv{display:grid;grid-template-columns:160px 1fr;gap:6px 10px}
-    input{background:#0b1426;color:var(--ink);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
-    .hidden{display:none !important}
+    th{color:var(--muted)}
+    .hidden{display:none!important}
     .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
-    .btn{border:1px solid var(--border);background:#0f172a;padding:10px 12px;border-radius:10px;cursor:pointer}
-    .btn:disabled{opacity:.5;cursor:not-allowed}
     tr.clickable{cursor:pointer}
     tr.clickable:hover{background:#0b1426}
   </style>
 </head>
 <body>
-  <header>
-    <div class="wrap top">
-      <h1>MA-PartD CY2025 — ZIP → Plans → Details</h1>
-      <nav role="tablist" aria-label="Views">
-        <button class="tab" role="tab" data-view="search" aria-selected="true">Search</button>
-        <button class="tab" role="tab" data-view="overview">Overview</button>
-        <button class="tab" role="tab" data-view="service">Service Areas</button>
-        <button class="tab" role="tab" data-view="details">Plan Details</button>
-        <button class="tab" role="tab" data-view="raw">Raw JSON</button>
-      </nav>
+<header>
+  <div class="wrap" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+    <h1 style="margin:0;font-size:18px">MA / Part D — ZIP → Plans → Details</h1>
+    <nav role="tablist" aria-label="Views">
+      <button class="tab" role="tab" data-view="search" aria-selected="true">Search</button>
+      <button class="tab" role="tab" data-view="overview">Overview</button>
+      <button class="tab" role="tab" data-view="service">Service Areas</button>
+      <button class="tab" role="tab" data-view="details">Plan Details</button>
+      <button class="tab" role="tab" data-view="raw">Raw JSON</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="view-search" class="panel">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <div class="hint">Viewer is <b>year-aware</b>. Add <span class="mono">?year=2025</span> (default 2025). Data is read from <span class="mono">years/&lt;year&gt;</span>.</div>
+      <label class="hint">CY
+        <select id="year">
+          <option value="2025">2025</option>
+          <option value="2024">2024</option>
+        </select>
+      </label>
     </div>
-  </header>
 
-  <main class="wrap">
-    <section id="view-search" class="panel">
-      <h2 style="margin:0 0 8px 0">Find plans by ZIP</h2>
-      <div class="row">
-        <input id="zip" inputmode="numeric" pattern="\d{5}" placeholder="Enter 5-digit ZIP (e.g., 55401)" style="width:220px">
-        <button id="search" class="btn">Search</button>
-        <div id="search-status" class="hint"></div>
-      </div>
-      <div id="plans-empty" class="hint" style="margin-top:10px">Enter a ZIP and click Search.</div>
-      <table id="plans-table" class="hidden">
-        <thead>
-          <tr>
-            <th>Carrier</th><th>Plan Name</th><th>Code</th><th>Type</th><th>Premium</th><th>State</th><th>County</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <div class="hint" style="margin-top:8px">Click a plan row to load its details.</div>
-    </section>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
+      <input id="zip" inputmode="numeric" pattern="\d{5}" placeholder="ZIP (e.g., 55401)" style="width:220px;background:#0b1426;color:#e5e7eb;border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+      <button id="search" class="btn">Search</button>
+      <div id="search-status" class="hint"></div>
+    </div>
 
-    <section id="view-overview" class="panel hidden">
-      <h2 style="margin:0 0 8px 0">Plan Overview</h2>
-      <div id="overview-empty" class="hint">Choose a plan from the search results.</div>
-      <div id="overview" class="kv hidden"></div>
-    </section>
+    <div id="plans-empty" class="hint" style="margin-top:10px">Enter a ZIP and click Search.</div>
+    <table id="plans-table" class="hidden">
+      <thead><tr><th>Carrier</th><th>Plan Name</th><th>Code</th><th>Type</th><th>Premium</th><th>State</th><th>County</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="hint" style="margin-top:8px">Click a plan row to load its details.</div>
+  </section>
 
-    <section id="view-service" class="panel hidden">
-      <h2 style="margin:0 0 8px 0">Service Areas (by-plan)</h2>
-      <div id="service-empty" class="hint">No service area rows.</div>
-      <table id="service-table" class="hidden">
-        <thead><tr><th>State</th><th>County</th><th>Premium</th><th>Contract</th><th>PlanID</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </section>
+  <section id="view-overview" class="panel hidden">
+    <h2 style="margin:0 0 8px">Plan Overview</h2>
+    <div id="overview-empty" class="hint">Choose a plan from results.</div>
+    <div id="overview" class="kv hidden"></div>
+  </section>
 
-    <section id="view-details" class="panel hidden">
-      <h2 style="margin:0 0 8px 0">Plan Details</h2>
-      <div id="details-empty" class="hint">No detail fields.</div>
-      <div id="details" class="kv hidden"></div>
-    </section>
+  <section id="view-service" class="panel hidden">
+    <h2 style="margin:0 0 8px">Service Areas</h2>
+    <div id="service-empty" class="hint">No rows.</div>
+    <table id="service-table" class="hidden">
+      <thead><tr><th>State</th><th>County</th><th>Premium</th><th>Contract</th><th>PlanID</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
 
-    <section id="view-raw" class="panel hidden">
-      <h2 style="margin:0 0 8px 0">Raw JSON</h2>
-      <details style="margin-top:8px">
-        <summary><b>plans/&lt;CODE&gt;.json</b></summary>
-        <pre id="raw-plans" class="mono"></pre>
-      </details>
-      <details style="margin-top:8px">
-        <summary><b>by-plan/&lt;CODE&gt;.json</b></summary>
-        <pre id="raw-byplan" class="mono"></pre>
-      </details>
-      <details style="margin-top:8px">
-        <summary><b>plan-details/&lt;CODE&gt;.json</b></summary>
-        <pre id="raw-details" class="mono"></pre>
-      </details>
-    </section>
-  </main>
+  <section id="view-details" class="panel hidden">
+    <h2 style="margin:0 0 8px">Plan Details</h2>
+    <div id="details-empty" class="hint">No fields.</div>
+    <div id="details" class="kv hidden"></div>
+  </section>
 
-  <script>
-    const $ = s => document.querySelector(s);
-    const fmt$ = n => (Number.isFinite(Number(n)) ? `$${Number(n).toFixed(2)}` : (n ?? ""));
-    function setStatus(el,msg){ el.innerHTML = msg; }
+  <section id="view-raw" class="panel hidden">
+    <h2 style="margin:0 0 8px">Raw JSON</h2>
+    <details><summary><b>plans/&lt;CODE&gt;.json</b></summary><pre id="raw-plans" class="mono"></pre></details>
+    <details><summary><b>by-plan/&lt;CODE&gt;.json</b></summary><pre id="raw-byplan" class="mono"></pre></details>
+    <details><summary><b>plan-details/&lt;CODE&gt;.json</b></summary><pre id="raw-details" class="mono"></pre></details>
+  </section>
+</main>
 
-    function show(view){
-      ["search","overview","service","details","raw"].forEach(v=>{
-        document.getElementById(`view-${v}`).classList.toggle("hidden", v!==view);
-        document.querySelector(`[data-view="${v}"]`).setAttribute("aria-selected", v===view ? "true":"false");
-      });
-      location.hash = "#"+view;
-    }
-    document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>show(b.dataset.view)));
+<script>
+  // Year selector & query param
+  const params = new URLSearchParams(location.search);
+  const DEFAULT_YEAR = "2025";
+  const YEAR = params.get("year") || DEFAULT_YEAR;
+  const yearSel = document.getElementById("year");
+  yearSel.value = YEAR;
+  yearSel.addEventListener("change", (e)=>{
+    const u = new URL(location.href);
+    u.searchParams.set("year", e.target.value);
+    location.href = u.toString();
+  });
 
-    // Endpoints with Pages first, then raw fallback
-    function endpointsForPlan(code){
-      return {
-        plans: [
-          `https://fitzgema.github.io/MA-PartD-CY2025/years/2025/plans/${code}.json`,
-          `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/2025/plans/${code}.json`
-        ],
-        byplan: [
-          `https://fitzgema.github.io/MA-PartD-CY2025/years/2025/by-plan/${code}.json`,
-          `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/2025/by-plan/${code}.json`
-        ],
-        details: [
-          `https://fitzgema.github.io/MA-PartD-CY2025/years/2025/plan-details/${code}.json`,
-          `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/2025/plan-details/${code}.json`
-        ]
-      };
-    }
-
-    function zipEndpoint(zip){
-      return [
-        `https://fitzgema.github.io/MA-PartD-CY2025/years/2025/zips/${zip}.json`,
-        `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/2025/zips/${zip}.json`
-      ];
-    }
-
-    async function fetchFirstOk(list){
-      for (const url of list){
-        try{
-          const res = await fetch(url, {cache:"no-store"});
-          if(!res.ok) throw new Error(res.status);
-          return await res.json();
-        }catch(_){}
-      }
-      return null;
-    }
-
-    // ZIP search
-    $("#search").addEventListener("click", async ()=>{
-      const zip = ($("#zip").value||"").trim();
-      if (!/^\d{5}$/.test(zip)){
-        setStatus($("#search-status"), '<span class="mono">Enter a valid 5-digit ZIP.</span>');
-        return;
-      }
-      setStatus($("#search-status"), "Loading plans…");
-      const list = await fetchFirstOk(zipEndpoint(zip));
-      if (!Array.isArray(list) || list.length===0){
-        setStatus($("#search-status"), "No plans found for this ZIP.");
-        $("#plans-table").classList.add("hidden");
-        $("#plans-empty").classList.remove("hidden");
-        return;
-      }
-      setStatus($("#search-status"), `Found ${list.length} plan(s). Click a row to view details.`);
-      renderPlanResults(list);
-      show("search");
+  const $ = s => document.querySelector(s);
+  const fmt$ = n => (Number.isFinite(Number(n)) ? `$${Number(n).toFixed(2)}` : (n ?? ""));
+  function setStatus(el,msg){ el.innerHTML = msg; }
+  function show(view){
+    ["search","overview","service","details","raw"].forEach(v=>{
+      document.getElementById(`view-${v}`).classList.toggle("hidden", v!==view);
+      document.querySelector(`[data-view="${v}"]`).setAttribute("aria-selected", v===view ? "true":"false");
     });
+    const u = new URL(location.href); u.hash = view; history.replaceState(null, "", u.toString());
+  }
+  document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>show(b.dataset.view)));
 
-    function renderPlanResults(list){
-      const tbody = $("#plans-table tbody");
-      tbody.innerHTML = list.map(p=>{
-        const code = p.planCode || `${p.contractId}-${p.planId}`;
-        const premium = fmt$(p.premium ?? p.monthlyPremium);
-        return `<tr class="clickable" data-code="${code}">
-          <td>${p.organization||""}</td>
-          <td>${p.planName||p.marketingName||""}</td>
-          <td>${code}</td>
-          <td>${p.type||p.planType||""}</td>
-          <td>${premium}</td>
-          <td>${p.state||""}</td>
-          <td>${p.county||""}</td>
-        </tr>`;
-      }).join("");
-
-      $("#plans-table").classList.remove("hidden");
-      $("#plans-empty").classList.add("hidden");
-
-      // wire clicks
-      tbody.querySelectorAll("tr.clickable").forEach(tr=>{
-        tr.addEventListener("click", ()=>{
-          const code = tr.getAttribute("data-code");
-          loadPlan(code);
-          show("overview");
-        });
-      });
+  // Build endpoints
+  function endpointsForPlan(code){
+    return {
+      plans: [
+        `years/${YEAR}/plans/${code}.json`,
+        `https://fitzgema.github.io/MA-PartD-CY2025/years/${YEAR}/plans/${code}.json`,
+        `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/${YEAR}/plans/${code}.json`
+      ],
+      byplan: [
+        `years/${YEAR}/by-plan/${code}.json`,
+        `https://fitzgema.github.io/MA-PartD-CY2025/years/${YEAR}/by-plan/${code}.json`,
+        `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/${YEAR}/by-plan/${code}.json`
+      ],
+      details: [
+        `years/${YEAR}/plan-details/${code}.json`,
+        `https://fitzgema.github.io/MA-PartD-CY2025/years/${YEAR}/plan-details/${code}.json`,
+        `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/${YEAR}/plan-details/${code}.json`
+      ]
+    };
+  }
+  function zipEndpoint(zip){
+    return [
+      `years/${YEAR}/zips/${zip}.json`,
+      `https://fitzgema.github.io/MA-PartD-CY2025/years/${YEAR}/zips/${zip}.json`,
+      `https://raw.githubusercontent.com/fitzgema/MA-PartD-CY2025/main/years/${YEAR}/zips/${zip}.json`
+    ];
+  }
+  async function fetchFirstOk(list){
+    for (const url of list){
+      try{
+        const res = await fetch(url, {cache:"no-store"});
+        if(!res.ok) throw new Error(res.status);
+        return await res.json();
+      }catch(_){}
     }
+    return null;
+  }
 
-    async function loadPlan(code){
-      const ep = endpointsForPlan(code);
-      const [plans, byplan, details] = await Promise.all([
-        fetchFirstOk(ep.plans),
-        fetchFirstOk(ep.byplan),
-        fetchFirstOk(ep.details)
-      ]);
-      renderOverview(Array.isArray(plans)?plans:null, (details && !Array.isArray(details))?details:null);
-      renderService(Array.isArray(byplan)?byplan:[]);
-      renderDetails(details && !Array.isArray(details)?details:{});
-      $("#raw-plans").textContent = plans ? JSON.stringify(plans,null,2) : "(not found)";
-      $("#raw-byplan").textContent = byplan ? JSON.stringify(byplan,null,2) : "(not found)";
-      $("#raw-details").textContent = details ? JSON.stringify(details,null,2) : "(not found)";
+  // ZIP search
+  $("#search").addEventListener("click", async ()=>{
+    const zip = ($("#zip").value||"").trim();
+    if (!/^\d{5}$/.test(zip)){
+      setStatus($("#search-status"), '<span class="mono">Enter a valid 5-digit ZIP.</span>');
+      $("#plans-table").classList.add("hidden");
+      $("#plans-empty").classList.remove("hidden");
+      return;
     }
-
-    function renderOverview(plans, details){
-      const el = $("#overview");
-      const empty = $("#overview-empty");
-      let row = null;
-      if (Array.isArray(plans) && plans.length) row = plans[0];
-      else if (details && typeof details === "object") row = details;
-
-      if (!row){ el.classList.add("hidden"); empty.classList.remove("hidden"); return; }
-
-      const fields = [
-        ["Organization", row.organization ?? row.Organization ?? row.carrier ?? ""],
-        ["Plan Name", row.marketingName ?? row.planName ?? ""],
-        ["Contract", row.contractId ?? row.ContractID ?? ""],
-        ["Plan ID", row.planId ?? row.PlanID ?? ""],
-        ["State", row.state ?? row.State ?? ""],
-        ["County", row.county ?? row.County ?? ""],
-        ["Premium", fmt$(row.premium ?? row.monthlyPremium)],
-        ["MOOP", row.moop ?? row.MOOP ?? ""],
-        ["Star Rating", row.starRating ?? row.stars ?? ""],
-        ["Type", row.type ?? row.planType ?? ""],
-      ].filter(([k,v])=> v!==undefined && v!=="");
-
-      el.innerHTML = fields.map(([k,v])=>`<div class="muted">${k}</div><div>${v}</div>`).join("");
-      el.classList.remove("hidden");
-      empty.classList.add("hidden");
+    setStatus($("#search-status"), "Loading plans…");
+    const list = await fetchFirstOk(zipEndpoint(zip));
+    if (!Array.isArray(list) || list.length===0){
+      setStatus($("#search-status"), "No plans found for this ZIP.");
+      $("#plans-table").classList.add("hidden");
+      $("#plans-empty").classList.remove("hidden");
+      return;
     }
-
-    function renderService(byplan){
-      const table = $("#service-table");
-      const body = $("#service-table tbody");
-      const empty = $("#service-empty");
-      if (!Array.isArray(byplan) || byplan.length===0){
-        table.classList.add("hidden"); empty.classList.remove("hidden"); return;
-      }
-      const rows = byplan.map(r=>{
-        const st = r.state ?? r.State ?? "";
-        const cty = r.county ?? r.County ?? r.serviceAreaCounty ?? "";
-        const prem = fmt$(r.premium ?? r.monthlyPremium);
-        const c = r.contractId ?? r.ContractID ?? "";
-        const p = r.planId ?? r.PlanID ?? "";
-        return `<tr><td>${st}</td><td>${cty}</td><td>${prem}</td><td>${c}</td><td>${p}</td></tr>`;
-      }).join("");
-      body.innerHTML = rows;
-      table.classList.remove("hidden");
-      empty.classList.add("hidden");
-    }
-
-    function renderDetails(details){
-      const el = $("#details");
-      const empty = $("#details-empty");
-      if (!details || typeof details!=="object" || Array.isArray(details)){
-        el.classList.add("hidden"); empty.classList.remove("hidden"); return;
-      }
-      const entries = Object.entries(details);
-      if (!entries.length){ el.classList.add("hidden"); empty.classList.remove("hidden"); return; }
-      el.innerHTML = entries.map(([k,v])=>`<div class="muted">${k}</div><div>${typeof v==="number"?v: (typeof v==="boolean"?(v?"Yes":"No"): String(v))}</div>`).join("");
-      el.classList.remove("hidden");
-      empty.classList.add("hidden");
-    }
-
-    // Default: prefill a sample ZIP so you can test instantly
-    $("#zip").value = "55401";
-    $("#search").click();
+    setStatus($("#search-status"), `Found ${list.length} plan(s). Click a row to view details.`);
+    renderPlanResults(list);
     show("search");
-  </script>
+  });
+
+  function renderPlanResults(list){
+    const tbody = $("#plans-table tbody");
+    tbody.innerHTML = list.map(p=>{
+      const code = p.planCode || `${p.contractId}-${p.planId}`;
+      const premium = fmt$(p.premium ?? p.monthlyPremium);
+      return `<tr class="clickable" data-code="${code}">
+        <td>${p.organization||""}</td>
+        <td>${p.planName||p.marketingName||""}</td>
+        <td>${code}</td>
+        <td>${p.type||p.planType||""}</td>
+        <td>${premium}</td>
+        <td>${p.state||""}</td>
+        <td>${p.county||""}</td>
+      </tr>`;
+    }).join("");
+
+    $("#plans-table").classList.remove("hidden");
+    $("#plans-empty").classList.add("hidden");
+
+    tbody.querySelectorAll("tr.clickable").forEach(tr=>{
+      tr.addEventListener("click", ()=>{
+        const code = tr.getAttribute("data-code");
+        loadPlan(code);
+        show("overview");
+      });
+    });
+  }
+
+  async function loadPlan(code){
+    const ep = endpointsForPlan(code);
+    const [plans, byplan, details] = await Promise.all([
+      fetchFirstOk(ep.plans),
+      fetchFirstOk(ep.byplan),
+      fetchFirstOk(ep.details)
+    ]);
+    renderOverview(Array.isArray(plans)?plans:null, (details && !Array.isArray(details))?details:null);
+    renderService(Array.isArray(byplan)?byplan:[]);
+    renderDetails(details && !Array.isArray(details)?details:{});
+    $("#raw-plans").textContent = plans ? JSON.stringify(plans,null,2) : "(not found)";
+    $("#raw-byplan").textContent = byplan ? JSON.stringify(byplan,null,2) : "(not found)";
+    $("#raw-details").textContent = details ? JSON.stringify(details,null,2) : "(not found)";
+  }
+
+  function renderOverview(plans, details){
+    const el = $("#overview");
+    const empty = $("#overview-empty");
+    let row = null;
+    if (Array.isArray(plans) && plans.length) row = plans[0];
+    else if (details && typeof details === "object") row = details;
+
+    if (!row){ el.classList.add("hidden"); empty.classList.remove("hidden"); return; }
+
+    const fields = [
+      ["Organization", row.organization ?? row.Organization ?? row.carrier ?? ""],
+      ["Plan Name", row.marketingName ?? row.planName ?? ""],
+      ["Contract", row.contractId ?? row.ContractID ?? ""],
+      ["Plan ID", row.planId ?? row.PlanID ?? ""],
+      ["State", row.state ?? row.State ?? ""],
+      ["County", row.county ?? row.County ?? ""],
+      ["Premium", fmt$(row.premium ?? row.monthlyPremium)],
+      ["MOOP", row.moop ?? row.MOOP ?? ""],
+      ["Star Rating", row.starRating ?? row.stars ?? ""],
+      ["Type", row.type ?? row.planType ?? ""],
+    ].filter(([k,v])=> v!==undefined && v!=="");
+
+    el.innerHTML = fields.map(([k,v])=>`<div class="hint">${k}</div><div>${v}</div>`).join("");
+    el.classList.remove("hidden");
+    empty.classList.add("hidden");
+  }
+
+  function renderService(byplan){
+    const table = $("#service-table");
+    const body = $("#service-table tbody");
+    const empty = $("#service-empty");
+    if (!Array.isArray(byplan) || byplan.length===0){
+      table.classList.add("hidden"); empty.classList.remove("hidden"); return;
+    }
+    const rows = byplan.map(r=>{
+      const st = r.state ?? r.State ?? "";
+      const cty = r.county ?? r.County ?? r.serviceAreaCounty ?? "";
+      const prem = fmt$(r.premium ?? r.monthlyPremium);
+      const c = r.contractId ?? r.ContractID ?? "";
+      const p = r.planId ?? r.PlanID ?? "";
+      return `<tr><td>${st}</td><td>${cty}</td><td>${prem}</td><td>${c}</td><td>${p}</td></tr>`;
+    }).join("");
+    body.innerHTML = rows;
+    table.classList.remove("hidden");
+    empty.classList.add("hidden");
+  }
+
+  function renderDetails(details){
+    const el = $("#details");
+    const empty = $("#details-empty");
+    if (!details || typeof details!=="object" || Array.isArray(details)){
+      el.classList.add("hidden"); empty.classList.remove("hidden"); return;
+    }
+    const entries = Object.entries(details);
+    if (!entries.length){ el.classList.add("hidden"); empty.classList.remove("hidden"); return; }
+    el.innerHTML = entries.map(([k,v])=>`<div class="hint">${k}</div><div>${typeof v==="number"?v: (typeof v==="boolean"?(v?"Yes":"No"): String(v))}</div>`).join("");
+    el.classList.remove("hidden");
+    empty.classList.add("hidden");
+  }
+
+  // convenience
+  $("#zip").value = "55401";
+  show(new URL(location.href).hash.replace("#","") || "search");
+</script>
 </body>
 </html>
