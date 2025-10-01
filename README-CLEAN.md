@@ -1,0 +1,12 @@
+# Cleaned repo changes
+- Removed all PDF/SB discovery code and dependencies.
+- `package.json` scripts simplified: only `build:ma` and `build` remain.
+- Delete these files:
+  - scripts/_pdf_text.js
+  - scripts/resolve_sb_urls.mjs
+  - scripts/build_ma_benefits.mjs
+- Ensure your data build publishes per-plan JSON under one of these paths:
+  - years/<YEAR>/by-plan/<CONTRACT>-<PBP>-<SEGMENT>.json
+  - years/<YEAR>/plan-details/<CONTRACT>-<PBP>-<SEGMENT>.json
+  - years/<YEAR>/plans/<CONTRACT>-<PBP>-<SEGMENT>.json
+  - ...or the CMS key variants supported by `relPlanPaths()` in web-demo/index.html
