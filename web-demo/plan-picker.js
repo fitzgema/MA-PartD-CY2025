@@ -1,0 +1,116 @@
+/*! PlanPicker — modal chooser that prefers full plan JSON (contract+PBP+segment/CMS key) before opening PlanViewer */
+(function () {
+  const PP = {
+    open(plans, opts = {}) {
+      if (!Array.isArray(plans) || plans.length === 0) return;
+
+      const overlay = document.createElement('div');
+      overlay.id = 'pp-overlay';
+      Object.assign(overlay.style, {
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.35)',
+        zIndex: 9998,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      });
+
+      const modal = document.createElement('div');
+      Object.assign(modal.style, {
+        width: 'min(720px, 96vw)',
+        maxHeight: '80vh',
+        overflow: 'auto',
+        background: 'white',
+        borderRadius: '12px',
+        boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+        padding: '12px 16px',
+      });
+
+      const title = document.createElement('div');
+      title.style.fontWeight = '600';
+      title.style.marginBottom = '8px';
+      title.textContent = opts.title || 'Select a plan';
+
+      const list = document.createElement('div');
+
+      const pad3 = (v) => String(v ?? '').replace(/\D/g, '').padStart(3, '0');
+
+      plans.forEach((p) => {
+        const contract = (p.contract || p.contractId || p.contract_id || '').toString().toUpperCase().trim();
+        const pbp = pad3(p.pbp ?? p.planId ?? p.plan_id ?? p.PBP ?? '');
+        const segment = pad3(p.segmentId ?? p.segment_id ?? p.segment ?? '000');
+        const cmsKey = p.cmsPlanKey || p.CMSPlanKey || `${(document.getElementById('year')?.value || '2025')}-${contract}-${pbp}-${segment}`;
+        const name = p.planName || p.name || '';
+        const premium = p.premium ?? p.monthly_premium ?? p.premiumMonthly ?? p.premium_total ?? null;
+
+        const row = document.createElement('button');
+        row.type = 'button';
+        Object.assign(row.style, {
+          width: '100%',
+          textAlign: 'left',
+          padding: '10px 12px',
+          margin: '6px 0',
+          border: '1px solid #e5e7eb',
+          borderRadius: '10px',
+          background: '#fafafa',
+          cursor: 'pointer',
+        });
+        row.onmouseenter = () => (row.style.background = '#f3f4f6');
+        row.onmouseleave = () => (row.style.background = '#fafafa');
+        row.textContent = `${contract}-${pbp}-${segment}  ${name}${
+          premium != null ? ` — $${Number(premium).toFixed(2)}/mo` : ''
+        }`;
+
+        row.addEventListener('click', async () => {
+          try {
+            const year = document.getElementById('year')?.value || '2025';
+            const loader = window.__loadPlanJSON;
+            if (typeof loader === 'function' && contract && pbp) {
+              const { json, url } = await loader(contract, pbp, year, segment, cmsKey);
+              PlanViewer.show({ __provenance: url, ...json }, {
+                title: `${contract} - ${pbp}`,
+                hint: `source: ${url}`,
+              });
+            } else {
+              // Fallback to embedded county object
+              PlanViewer.show(p, {
+                title: `${contract} - ${pbp}`,
+                hint: 'source: carrier → PlanPicker (county JSON fallback)',
+              });
+            }
+          } catch (e) {
+            console.warn('PlanPicker full-load failed; falling back to county object', e);
+            PlanViewer.show(p, {
+              title: `${contract} - ${pbp}`,
+              hint: 'source: carrier → PlanPicker (county JSON fallback)',
+            });
+          }
+          PP.close();
+        });
+
+        list.appendChild(row);
+      });
+
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = 'Close';
+      closeBtn.style.marginTop = '8px';
+      closeBtn.style.padding = '6px 10px';
+      closeBtn.style.border = '1px solid #e5e7eb';
+      closeBtn.style.borderRadius = '8px';
+      closeBtn.addEventListener('click', () => PP.close());
+
+      modal.appendChild(title);
+      modal.appendChild(list);
+      modal.appendChild(closeBtn);
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+    },
+
+    close() {
+      document.getElementById('pp-overlay')?.remove();
+    },
+  };
+
+  window.PlanPicker = PP;
+})();
