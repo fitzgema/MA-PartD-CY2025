@@ -1,0 +1,14 @@
+{
+  "contractId": "H2458",
+  "planId": "002",
+  "marketingName": "Acme MA Plus (H2458-002)",
+  "organization": "Acme Health",
+  "starRating": 4.5,
+  "moop": 4500,
+  "premium": 29,
+  "drugDeductible": 195,
+  "inNetworkMax": 25,
+  "telehealth": "Yes",
+  "network": "HMO-POS",
+  "includesPartD": true
+}
