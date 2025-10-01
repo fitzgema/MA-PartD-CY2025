@@ -5,9 +5,7 @@
   "private": true,
   "scripts": {
     "build:ma": "node scripts/build_ma_dataset.mjs",
-    "resolve:sb": "node scripts/resolve_sb_urls.mjs",
-    "build:benefits": "node scripts/build_ma_benefits.mjs",
-    "build": "npm run build:ma && npm run resolve:sb && npm run build:benefits"
+    "build": "npm run build:ma"
   },
   "dependencies": {
     "adm-zip": "^0.5.10",
@@ -15,7 +13,6 @@
     "fast-glob": "^3.3.2",
     "node-fetch": "^3.3.2",
     "p-limit": "^5.0.0",
-    "pdfjs-dist": "^4.4.168",
     "xlsx": "^0.18.5"
   }
 }
